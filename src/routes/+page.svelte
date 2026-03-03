@@ -7,8 +7,6 @@
 	import type { Task, Run } from '$lib/types';
 
 	let { data }: { data: PageData } = $props();
-	
-	import { page } from '$app/stores';
 
 	// Kanban columns
 	const backlog = $derived(data.tasks.filter((t: Task) => t.status === 'queued'));

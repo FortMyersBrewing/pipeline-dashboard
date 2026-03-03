@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
+	import { page } from '$app/stores';
 	import type { PageData } from './$types';
-	import { STAGES, STAGE_LABELS } from '$lib/types';
+	import { STAGES, STAGE_LABELS, STACK_TYPE_COLORS } from '$lib/types';
 	import type { Task, Run } from '$lib/types';
 
 	let { data }: { data: PageData } = $props();
+	
+	import { page } from '$app/stores';
 
 	// Kanban columns
 	const backlog = $derived(data.tasks.filter((t: Task) => t.status === 'queued'));
@@ -14,6 +17,14 @@
 	const complete = $derived(data.tasks.filter((t: Task) => ['done', 'failed', 'paused'].includes(t.status)));
 
 	let filterProject = $state('all');
+	
+	// Set initial filter from URL params
+	$effect(() => {
+		const projectParam = $page.url.searchParams.get('project');
+		if (projectParam) {
+			filterProject = projectParam;
+		}
+	});
 	let showNewTask = $state(false);
 	let newTask = $state({ id: '', title: '', description: '', project_id: '', priority: 'medium' });
 
@@ -83,6 +94,10 @@
 		if (!task.current_stage) return '◆';
 		const map: Record<string, string> = { scout: '🔍', builder: '🏗', gatekeeper: '🚦', reviewer: '👁', qa: '🧪' };
 		return map[task.current_stage] || '◆';
+	}
+
+	function getProjectColor(stackType: string): { bg: string; text: string } {
+		return STACK_TYPE_COLORS[stackType] || STACK_TYPE_COLORS.default;
 	}
 
 	async function createTask() {
@@ -199,7 +214,7 @@
 	<div class="flex-1 overflow-hidden px-4 py-4">
 		<div class="flex gap-4 h-full">
 			{#each columns as col}
-				{@const filteredTasks = filterProject === 'all' ? col.tasks : col.tasks.filter((t: Task) => t.project_id === filterProject)}
+				{@const filteredTasks = filterProject === 'all' ? col.tasks : col.tasks.filter((t: Task) => t.project_id === filterProject || t.project_slug === filterProject)}
 				<div class="flex-1 min-w-[240px] flex flex-col">
 					<!-- Column header -->
 					<div class="flex items-center gap-2 mb-3 px-1">
@@ -223,7 +238,8 @@
 								<div class="flex items-center justify-between ml-4">
 									<div class="flex items-center gap-2">
 										<span class="text-xs" title={task.current_stage || 'queued'}>{agentAvatar(task)}</span>
-										<span class="text-[10px] px-1.5 py-0.5 rounded bg-bg/60 text-text-dim">{task.project_id}</span>
+										{@const colors = getProjectColor(task.project_stack_type || 'default')}
+										<span class="text-[10px] px-1.5 py-0.5 rounded {colors.bg} {colors.text}">{task.project_name || task.project_id}</span>
 									</div>
 									<span class="text-[10px] text-text-dim">{timeAgo(task.updated_at)}</span>
 								</div>

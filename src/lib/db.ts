@@ -20,9 +20,13 @@ function initDb(db: Database.Database) {
 		CREATE TABLE IF NOT EXISTS projects (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
+			slug TEXT NOT NULL UNIQUE,
 			repo_path TEXT NOT NULL,
 			repo_url TEXT,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			stack_type TEXT NOT NULL,
+			status TEXT DEFAULT 'active',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 
 		CREATE TABLE IF NOT EXISTS tasks (
@@ -72,67 +76,51 @@ function initDb(db: Database.Database) {
 		);
 	`);
 
-	// Ensure tapwright project exists
+	// Seed projects if none exist
 	const count = db.prepare('SELECT COUNT(*) as n FROM projects').get() as { n: number };
 	if (count.n === 0) {
-		db.prepare(`INSERT INTO projects (id, name, repo_path, repo_url) VALUES (?, ?, ?, ?)`).run(
-			'tapwright', 'Tapwright', '~/projects/brewplatform',
-			'https://github.com/FortMyersBrewing/brewplatform'
-		);
+		const projects = [
+			{
+				id: 'tapwright',
+				name: 'Tapwright',
+				slug: 'tapwright', 
+				repo_path: '~/projects/brewplatform',
+				repo_url: 'https://github.com/FortMyersBrewing/brewplatform',
+				stack_type: 'python'
+			},
+			{
+				id: 'pipeline-dashboard',
+				name: 'Pipeline Dashboard',
+				slug: 'pipeline-dashboard',
+				repo_path: '~/projects/pipeline-dashboard-build',
+				repo_url: 'https://github.com/FortMyersBrewing/pipeline-dashboard',
+				stack_type: 'node'
+			},
+			{
+				id: 'anti-slop-pipeline',
+				name: 'Anti-Slop Pipeline',
+				slug: 'anti-slop-pipeline',
+				repo_path: '~/.openclaw/workspace/agents/pipeline',
+				repo_url: null,
+				stack_type: 'shell'
+			},
+			{
+				id: 'fmb-menu',
+				name: 'FMB Menu',
+				slug: 'fmb-menu',
+				repo_path: '~/.openclaw/workspace/fmb-menu',
+				repo_url: null,
+				stack_type: 'node'
+			}
+		];
+
+		const insertProject = db.prepare(`INSERT INTO projects (id, name, slug, repo_path, repo_url, stack_type) VALUES (?, ?, ?, ?, ?, ?)`);
+		for (const project of projects) {
+			insertProject.run(project.id, project.name, project.slug, project.repo_path, project.repo_url, project.stack_type);
+		}
 	}
 }
 
 function _seed_disabled(db: Database.Database) {
-	db.prepare(`INSERT INTO projects (id, name, repo_path, repo_url) VALUES (?, ?, ?, ?)`).run(
-		'tapwright',
-		'Tapwright',
-		'~/projects/brewplatform',
-		'https://github.com/FortMyersBrewing/brewplatform'
-	);
-
-	const now = new Date().toISOString();
-	const fiveMinAgo = new Date(Date.now() - 5 * 60000).toISOString();
-	const tenMinAgo = new Date(Date.now() - 10 * 60000).toISOString();
-	const hourAgo = new Date(Date.now() - 60 * 60000).toISOString();
-
-	// Task 1: In review stage
-	db.prepare(`INSERT INTO tasks (id, project_id, title, description, status, current_stage, attempt, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-		'task-001', 'tapwright', 'Add vendor signup API endpoint',
-		'Create POST /api/vendors endpoint with validation for name, email, phone, and SMS consent fields.',
-		'reviewing', 'reviewer', 1, 'high', hourAgo, fiveMinAgo
-	);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run('task-001', 1, 'scout', 'claude-sonnet', 'passed', hourAgo, new Date(Date.now() - 55 * 60000).toISOString(), 45000);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run('task-001', 1, 'builder', 'claude-sonnet', 'passed', new Date(Date.now() - 50 * 60000).toISOString(), new Date(Date.now() - 40 * 60000).toISOString(), 600000);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run('task-001', 1, 'gatekeeper', 'automated', 'passed', new Date(Date.now() - 38 * 60000).toISOString(), new Date(Date.now() - 37 * 60000).toISOString(), 60000);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run('task-001', 1, 'reviewer', 'codex-gpt', 'running', fiveMinAgo, null, null);
-
-	db.prepare(`INSERT INTO events (task_id, type, message, agent, created_at) VALUES (?, ?, ?, ?, ?)`).run('task-001', 'stage_start', 'Scout started: analyzing codebase for vendor endpoint', 'claude-sonnet', hourAgo);
-	db.prepare(`INSERT INTO events (task_id, type, message, agent, created_at) VALUES (?, ?, ?, ?, ?)`).run('task-001', 'stage_pass', 'Scout completed: spec v1 written (12 files identified)', 'claude-sonnet', new Date(Date.now() - 55 * 60000).toISOString());
-	db.prepare(`INSERT INTO events (task_id, type, message, agent, created_at) VALUES (?, ?, ?, ?, ?)`).run('task-001', 'stage_pass', 'Builder completed: 4 files modified, all gates passing', 'claude-sonnet', new Date(Date.now() - 40 * 60000).toISOString());
-	db.prepare(`INSERT INTO events (task_id, type, message, agent, created_at) VALUES (?, ?, ?, ?, ?)`).run('task-001', 'stage_pass', 'Gatekeeper: ruff ✅ mypy ✅ pytest ✅', 'automated', new Date(Date.now() - 37 * 60000).toISOString());
-	db.prepare(`INSERT INTO events (task_id, type, message, agent, created_at) VALUES (?, ?, ?, ?, ?)`).run('task-001', 'stage_start', 'Reviewer started: reviewing diff against spec', 'codex-gpt', fiveMinAgo);
-
-	// Task 2: Building (attempt 2 after rejection)
-	db.prepare(`INSERT INTO tasks (id, project_id, title, description, status, current_stage, attempt, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-		'task-002', 'tapwright', 'Vendor list page with search and filters',
-		'Create /vendors page showing all registered vendors with search by name, filter by status, and pagination.',
-		'building', 'builder', 2, 'medium', new Date(Date.now() - 2 * 3600000).toISOString(), tenMinAgo
-	);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, result, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('task-002', 1, 'scout', 'claude-sonnet', 'passed', null, new Date(Date.now() - 2 * 3600000).toISOString(), new Date(Date.now() - 110 * 60000).toISOString(), 60000);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, result, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('task-002', 1, 'builder', 'claude-sonnet', 'passed', null, new Date(Date.now() - 105 * 60000).toISOString(), new Date(Date.now() - 90 * 60000).toISOString(), 900000);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, result, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('task-002', 1, 'gatekeeper', 'automated', 'passed', null, new Date(Date.now() - 88 * 60000).toISOString(), new Date(Date.now() - 87 * 60000).toISOString(), 60000);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, result, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run('task-002', 1, 'reviewer', 'codex-gpt', 'rejected', 'Missing pagination params validation. Search does not handle special characters.', new Date(Date.now() - 85 * 60000).toISOString(), new Date(Date.now() - 80 * 60000).toISOString(), 300000);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, started_at, finished_at, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run('task-002', 2, 'scout', 'claude-sonnet', 'passed', new Date(Date.now() - 30 * 60000).toISOString(), new Date(Date.now() - 25 * 60000).toISOString(), 50000);
-	db.prepare(`INSERT INTO runs (task_id, attempt, stage, agent, status, started_at) VALUES (?, ?, ?, ?, ?, ?)`).run('task-002', 2, 'builder', 'claude-sonnet', 'running', tenMinAgo);
-
-	db.prepare(`INSERT INTO events (task_id, type, message, agent, created_at) VALUES (?, ?, ?, ?, ?)`).run('task-002', 'stage_fail', 'Reviewer rejected: missing pagination validation + special char handling', 'codex-gpt', new Date(Date.now() - 80 * 60000).toISOString());
-	db.prepare(`INSERT INTO events (task_id, type, message, agent, created_at) VALUES (?, ?, ?, ?, ?)`).run('task-002', 'retry', 'Retry attempt 2: feeding rejection reasons to Scout', 'coordinator', new Date(Date.now() - 30 * 60000).toISOString());
-	db.prepare(`INSERT INTO events (task_id, type, message, agent, created_at) VALUES (?, ?, ?, ?, ?)`).run('task-002', 'stage_start', 'Builder started (attempt 2)', 'claude-sonnet', tenMinAgo);
-
-	// Task 3: Queued
-	db.prepare(`INSERT INTO tasks (id, project_id, title, description, status, current_stage, attempt, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-		'task-003', 'tapwright', 'SMS consent confirmation flow',
-		'After vendor signs up with SMS consent, send confirmation SMS via Twilio and track opt-in status.',
-		'queued', null, 0, 'medium', now, now
-	);
+	// Disabled seed function - no hardcoded project data
 }

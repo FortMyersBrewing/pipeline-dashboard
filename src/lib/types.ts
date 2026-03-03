@@ -1,15 +1,22 @@
 export interface Project {
 	id: string;
 	name: string;
+	slug: string;
 	repo_path: string;
 	repo_url: string | null;
+	stack_type: string;
+	status: string;
 	created_at: string;
+	updated_at: string;
 	task_counts?: Record<string, number>;
 }
 
 export interface Task {
 	id: string;
 	project_id: string;
+	project_name?: string;
+	project_slug?: string;
+	project_stack_type?: string;
 	title: string;
 	description: string | null;
 	status: string;
@@ -76,4 +83,14 @@ export const STAGE_LABELS: Record<string, string> = {
 	gatekeeper: 'Gate',
 	reviewer: 'Review',
 	qa: 'QA',
+};
+
+export const STACK_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
+	python: { bg: 'bg-blue-600/20', text: 'text-blue-400' },
+	node: { bg: 'bg-green-600/20', text: 'text-green-400' },
+	rust: { bg: 'bg-orange-600/20', text: 'text-orange-400' },
+	shell: { bg: 'bg-gray-600/20', text: 'text-gray-400' },
+	go: { bg: 'bg-cyan-600/20', text: 'text-cyan-400' },
+	java: { bg: 'bg-red-600/20', text: 'text-red-400' },
+	default: { bg: 'bg-bg/60', text: 'text-text-dim' },
 };

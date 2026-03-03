@@ -5,14 +5,13 @@ import { resolve } from 'path';
 import { homedir } from 'os';
 
 const BASES: Record<string, string> = {
-	docs: resolve(homedir(), 'projects/brewplatform'),
 	memory: resolve(homedir(), '.openclaw/workspace'),
 };
 
 export const GET: RequestHandler = ({ url }) => {
 	const filePath = url.searchParams.get('path');
-	const base = url.searchParams.get('base') || 'docs';
-	const BASE_DIR = BASES[base] || BASES.docs;
+	const base = url.searchParams.get('base') || 'memory';
+	const BASE_DIR = BASES[base] || BASES.memory;
 
 	if (!filePath) {
 		return json({ error: 'path parameter required' }, { status: 400 });

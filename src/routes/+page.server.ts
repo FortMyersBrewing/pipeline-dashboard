@@ -4,7 +4,12 @@ import type { Task, Run, PipelineEvent, Project } from '$lib/types';
 
 export const load: PageServerLoad = () => {
 	const db = getDb();
-	const tasks = db.prepare("SELECT * FROM tasks ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, updated_at DESC").all() as Task[];
+	const tasks = db.prepare(`
+		SELECT tasks.*, projects.name as project_name, projects.slug as project_slug, projects.stack_type as project_stack_type 
+		FROM tasks 
+		LEFT JOIN projects ON tasks.project_id = projects.id
+		ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, updated_at DESC
+	`).all() as Task[];
 
 	const enriched = tasks.map((t) => {
 		const runs = db.prepare('SELECT * FROM runs WHERE task_id = ? ORDER BY attempt, started_at').all(t.id) as Run[];
@@ -12,7 +17,7 @@ export const load: PageServerLoad = () => {
 		return { ...t, runs, events };
 	});
 
-	const projects = db.prepare('SELECT id, name FROM projects ORDER BY name').all() as Project[];
+	const projects = db.prepare('SELECT * FROM projects ORDER BY name').all() as Project[];
 
 	const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 	const thisWeek = db.prepare("SELECT COUNT(*) as n FROM tasks WHERE created_at >= ?").get(weekAgo) as { n: number };

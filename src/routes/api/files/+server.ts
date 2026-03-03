@@ -5,14 +5,13 @@ import { resolve, join, relative } from 'path';
 import { homedir } from 'os';
 
 const BASES: Record<string, string> = {
-	docs: resolve(homedir(), 'projects/brewplatform'),
 	memory: resolve(homedir(), '.openclaw/workspace'),
 };
 
 export const GET: RequestHandler = ({ url }) => {
 	const dir = url.searchParams.get('dir') || '';
-	const base = url.searchParams.get('base') || 'docs';
-	const BASE_DIR = BASES[base] || BASES.docs;
+	const base = url.searchParams.get('base') || 'memory';
+	const BASE_DIR = BASES[base] || BASES.memory;
 
 	// Ensure memory directory exists
 	if (base === 'memory' && !existsSync(BASE_DIR)) {

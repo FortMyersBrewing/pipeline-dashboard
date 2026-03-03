@@ -73,6 +73,9 @@
 						{#if event.task_title}
 							<span class="text-[10px] text-text-dim font-mono">{event.task_id}</span>
 							<span class="text-[10px] text-text-muted">{event.task_title}</span>
+							{#if event.project_name}
+								<span class="text-[10px] text-text-dim">in {event.project_name}</span>
+							{/if}
 						{/if}
 						{#if event.agent}
 							<span class="text-[10px] {agentColor(event.agent)}">· {event.agent}</span>

@@ -23,13 +23,15 @@ export const GET: RequestHandler = () => {
 export const POST: RequestHandler = async ({ request }) => {
 	const db = getDb();
 	const body = await request.json();
-	const { id, name, repo_path, repo_url } = body;
+	const { id, name, slug, repo_path, repo_url, stack_type, status } = body;
 
-	if (!id || !name || !repo_path) {
-		return json({ error: 'id, name, and repo_path are required' }, { status: 400 });
+	if (!id || !name || !slug || !repo_path || !stack_type) {
+		return json({ error: 'id, name, slug, repo_path, and stack_type are required' }, { status: 400 });
 	}
 
-	db.prepare(`INSERT INTO projects (id, name, repo_path, repo_url) VALUES (?, ?, ?, ?)`).run(id, name, repo_path, repo_url || null);
+	db.prepare(`INSERT INTO projects (id, name, slug, repo_path, repo_url, stack_type, status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
+		id, name, slug, repo_path, repo_url || null, stack_type, status || 'active'
+	);
 	const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
 	return json(project, { status: 201 });
 };

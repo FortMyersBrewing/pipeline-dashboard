@@ -74,6 +74,13 @@ function initDb(db: Database.Database) {
 			agent TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
+
+		CREATE TABLE IF NOT EXISTS agent_status (
+			agent_id TEXT PRIMARY KEY,
+			status TEXT NOT NULL,
+			current_task TEXT,
+			last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
 	`);
 
 	// Seed projects if none exist

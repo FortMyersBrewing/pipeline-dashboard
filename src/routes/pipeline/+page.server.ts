@@ -1,5 +1,9 @@
 import type { PageServerLoad } from './$types';
 import { getDb } from '$lib/db';
+import type { Run, PipelineEvent } from '$lib/types';
+
+type RunWithTitle = Run & { task_title: string; priority: string };
+type EventWithTitle = PipelineEvent & { task_title: string | null };
 
 export const load: PageServerLoad = () => {
 	const db = getDb();
@@ -10,7 +14,7 @@ export const load: PageServerLoad = () => {
 		JOIN tasks t ON r.task_id = t.id
 		ORDER BY r.started_at DESC
 		LIMIT 100
-	`).all();
+	`).all() as RunWithTitle[];
 
 	const events = db.prepare(`
 		SELECT e.*, t.title as task_title
@@ -18,7 +22,7 @@ export const load: PageServerLoad = () => {
 		LEFT JOIN tasks t ON e.task_id = t.id
 		ORDER BY e.created_at DESC
 		LIMIT 50
-	`).all();
+	`).all() as EventWithTitle[];
 
 	// Pipeline stats
 	const totalRuns = db.prepare('SELECT COUNT(*) as n FROM runs').get() as { n: number };

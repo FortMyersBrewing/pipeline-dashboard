@@ -1,13 +1,23 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { readdirSync, statSync, existsSync } from 'fs';
+import { readdirSync, statSync, existsSync, mkdirSync } from 'fs';
 import { resolve, join, relative } from 'path';
 import { homedir } from 'os';
 
-const BASE_DIR = resolve(homedir(), 'projects/brewplatform');
+const BASES: Record<string, string> = {
+	docs: resolve(homedir(), 'projects/brewplatform'),
+	memory: resolve(homedir(), '.openclaw/workspace'),
+};
 
 export const GET: RequestHandler = ({ url }) => {
 	const dir = url.searchParams.get('dir') || '';
+	const base = url.searchParams.get('base') || 'docs';
+	const BASE_DIR = BASES[base] || BASES.docs;
+
+	// Ensure memory directory exists
+	if (base === 'memory' && !existsSync(BASE_DIR)) {
+		mkdirSync(BASE_DIR, { recursive: true });
+	}
 
 	// Prevent directory traversal
 	const resolved = resolve(BASE_DIR, dir);

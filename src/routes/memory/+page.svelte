@@ -13,7 +13,7 @@
 		fileContent = '';
 		viewingFile = '';
 		try {
-			const res = await fetch(`/api/files?dir=${encodeURIComponent(dir)}`);
+			const res = await fetch(`/api/files?base=memory&dir=${encodeURIComponent(dir)}`);
 			const data = await res.json();
 			if (!res.ok) { error = data.error; return; }
 			currentDir = data.dir || '';
@@ -27,7 +27,7 @@
 		loading = true;
 		error = '';
 		try {
-			const res = await fetch(`/api/docs?path=${encodeURIComponent(path)}`);
+			const res = await fetch(`/api/docs?base=memory&path=${encodeURIComponent(path)}`);
 			const data = await res.json();
 			if (!res.ok) { error = data.error; return; }
 			fileContent = data.content;
@@ -57,6 +57,8 @@
 		if (name.endsWith('.py')) return '🐍';
 		if (name.endsWith('.sql')) return '🗄';
 		if (name.endsWith('.yml') || name.endsWith('.yaml')) return '⚙';
+		if (name.endsWith('.toml') || name.endsWith('.cfg')) return '⚙';
+		if (name.endsWith('.log') || name.endsWith('.txt')) return '📃';
 		return '📄';
 	}
 
@@ -68,12 +70,12 @@
 <div class="p-6 h-full flex flex-col">
 	<div class="mb-4">
 		<h1 class="text-lg font-semibold text-text">Memory</h1>
-		<p class="text-xs text-text-muted mt-0.5">Project file browser</p>
+		<p class="text-xs text-text-muted mt-0.5">Workspace memory files and configs</p>
 	</div>
 
 	<!-- Breadcrumb -->
 	<div class="flex items-center gap-1 mb-4 text-xs">
-		<button onclick={() => loadDir('')} class="text-accent hover:underline">root</button>
+		<button onclick={() => loadDir('')} class="text-accent hover:underline">~/.openclaw/workspace</button>
 		{#if currentDir}
 			{#each currentDir.split('/') as part, i}
 				<span class="text-text-dim">/</span>

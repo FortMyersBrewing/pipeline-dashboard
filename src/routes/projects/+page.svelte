@@ -32,13 +32,13 @@
 				</div>
 				<div class="flex items-center gap-4 text-xs">
 					<span class="text-text-muted">{project.total_tasks} tasks</span>
-					{#if project.task_counts.done}
+					{#if project.task_counts?.done}
 						<span class="text-success">{project.task_counts.done} done</span>
 					{/if}
-					{#each Object.entries(project.task_counts).filter(([k]) => !['done', 'queued'].includes(k)) as [status, count]}
+					{#each Object.entries(project.task_counts || {}).filter(([k]) => !['done', 'queued'].includes(k)) as [status, count]}
 						<span class="text-info">{count} {status}</span>
 					{/each}
-					{#if project.task_counts.queued}
+					{#if project.task_counts?.queued}
 						<span class="text-text-dim">{project.task_counts.queued} queued</span>
 					{/if}
 				</div>

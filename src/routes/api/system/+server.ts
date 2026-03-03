@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDb } from '$lib/db';
+import { hostname } from 'os';
 
 export const GET: RequestHandler = () => {
 	const db = getDb();
@@ -18,6 +19,7 @@ export const GET: RequestHandler = () => {
 			name: 'OpenClaw Gateway',
 			status: 'operational',
 			description: 'API gateway and task router',
+			details: `Port 5555 · ${hostname()}`,
 			uptime: Math.floor(uptime),
 		},
 		{
@@ -40,11 +42,13 @@ export const GET: RequestHandler = () => {
 	];
 
 	// Node info
-	let nodeVersion = process.version;
-	let platform = process.platform;
-	let memUsage = process.memoryUsage();
+	const nodeVersion = process.version;
+	const platform = process.platform;
+	const memUsage = process.memoryUsage();
 
 	return json({
+		hostname: hostname(),
+		port: 5555,
 		uptime: Math.floor(uptime),
 		node_version: nodeVersion,
 		platform,

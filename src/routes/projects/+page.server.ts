@@ -3,7 +3,7 @@ import { getDb } from '$lib/db';
 
 export const load: PageServerLoad = () => {
 	const db = getDb();
-	const projects = db.prepare('SELECT * FROM projects ORDER BY name').all() as { id: string }[];
+	const projects = db.prepare('SELECT * FROM projects ORDER BY name').all() as { id: string; name: string; repo_path: string; repo_url: string | null; created_at: string }[];
 
 	const enriched = projects.map((p) => {
 		const counts = db.prepare(`SELECT status, COUNT(*) as count FROM tasks WHERE project_id = ? GROUP BY status`).all(p.id) as { status: string; count: number }[];

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
-	let docFiles: { name: string; path: string }[] = $state([]);
+	let docFiles: { name: string; path: string; type: string }[] = $state([]);
 	let currentDoc = $state('');
 	let content = $state('');
 	let renderedHtml = $state('');
@@ -41,12 +41,13 @@
 
 	async function loadDocList() {
 		try {
-			const res = await fetch('/api/files?dir=');
+			const res = await fetch('/api/files?base=docs&dir=');
 			const data = await res.json();
 			if (data.items) {
+				const knownNames = new Set(knownDocs.map(d => d.name));
 				docFiles = data.items
 					.filter((f: { name: string; type: string }) => f.name.endsWith('.md') || f.type === 'directory')
-					.filter((f: { name: string }) => !f.name.startsWith('node_modules'));
+					.filter((f: { name: string }) => !f.name.startsWith('node_modules') && !knownNames.has(f.name));
 			}
 		} catch { /* ignore */ }
 	}
@@ -68,6 +69,7 @@
 	// Known docs
 	const knownDocs = [
 		{ name: 'ARCHITECTURE.md', path: 'ARCHITECTURE.md' },
+		{ name: 'SPEC.md', path: 'SPEC.md' },
 		{ name: 'README.md', path: 'README.md' },
 		{ name: 'CLAUDE.md', path: 'CLAUDE.md' },
 		{ name: 'CHANGELOG.md', path: 'CHANGELOG.md' },

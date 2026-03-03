@@ -15,7 +15,6 @@
 		gatekeeper: 'border-gatekeeper/30 hover:border-gatekeeper/50',
 		reviewer: 'border-reviewer/30 hover:border-reviewer/50',
 		qa: 'border-qa/30 hover:border-qa/50',
-		coordinator: 'border-accent/30 hover:border-accent/50',
 	};
 
 	const agentTextColor: Record<string, string> = {
@@ -24,7 +23,6 @@
 		gatekeeper: 'text-gatekeeper',
 		reviewer: 'text-reviewer',
 		qa: 'text-qa',
-		coordinator: 'text-accent',
 	};
 </script>
 

@@ -2,6 +2,8 @@
 	import { onMount, onDestroy } from 'svelte';
 
 	let systemData: {
+		hostname: string;
+		port: number;
 		uptime: number;
 		node_version: string;
 		platform: string;
@@ -100,6 +102,14 @@
 			<div class="bg-bg-card border border-border rounded-lg p-4">
 				<h3 class="text-xs font-semibold text-text-dim uppercase tracking-wider mb-3">Runtime</h3>
 				<div class="space-y-2 text-xs">
+					<div class="flex justify-between">
+						<span class="text-text-muted">Hostname</span>
+						<span class="text-text font-mono">{systemData.hostname}</span>
+					</div>
+					<div class="flex justify-between">
+						<span class="text-text-muted">Port</span>
+						<span class="text-text font-mono">{systemData.port}</span>
+					</div>
 					<div class="flex justify-between">
 						<span class="text-text-muted">Node.js</span>
 						<span class="text-text font-mono">{systemData.node_version}</span>

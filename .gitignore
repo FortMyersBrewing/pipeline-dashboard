@@ -1,0 +1,4 @@
+pipeline.db
+node_modules
+.svelte-kit
+build

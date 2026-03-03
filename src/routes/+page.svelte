@@ -236,8 +236,7 @@
 								<div class="flex items-center justify-between ml-4">
 									<div class="flex items-center gap-2">
 										<span class="text-xs" title={task.current_stage || 'queued'}>{agentAvatar(task)}</span>
-										{@const colors = getProjectColor(task.project_stack_type || 'default')}
-										<span class="text-[10px] px-1.5 py-0.5 rounded {colors.bg} {colors.text}">{task.project_name || task.project_id}</span>
+												<span class="text-[10px] px-1.5 py-0.5 rounded {getProjectColor(task.project_stack_type || 'default').bg} {getProjectColor(task.project_stack_type || 'default').text}">{task.project_name || task.project_id}</span>
 									</div>
 									<span class="text-[10px] text-text-dim">{timeAgo(task.updated_at)}</span>
 								</div>

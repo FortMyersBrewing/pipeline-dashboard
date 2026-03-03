@@ -1,7 +1,13 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	let refreshInterval: ReturnType<typeof setInterval>;
+	onMount(() => { refreshInterval = setInterval(() => invalidateAll(), 5000); });
+	onDestroy(() => clearInterval(refreshInterval));
 
 	function timeAgo(date: string): string {
 		const ms = Date.now() - new Date(date).getTime();
@@ -15,52 +21,69 @@
 
 	function typeIcon(type: string): string {
 		const icons: Record<string, string> = {
-			stage_start: '▶',
-			stage_pass: '✓',
-			stage_fail: '✗',
-			retry: '↻',
-			escalation: '🚨',
-			merge: '⊕',
-			note: '●',
+			stage_start: '▶', stage_pass: '✓', stage_fail: '✗',
+			retry: '↻', escalation: '!', merge: '⊕', note: '●',
 		};
 		return icons[type] || '●';
 	}
 
 	function typeColor(type: string): string {
-		if (type === 'stage_pass' || type === 'merge') return 'text-[#22C55E]';
-		if (type === 'stage_fail' || type === 'escalation') return 'text-[#EF4444]';
-		if (type === 'retry') return 'text-[#EAB308]';
-		if (type === 'stage_start') return 'text-[#8B5CF6]';
-		return 'text-[#71717A]';
+		if (type === 'stage_pass' || type === 'merge') return 'text-success';
+		if (type === 'stage_fail' || type === 'escalation') return 'text-error';
+		if (type === 'retry') return 'text-warning';
+		if (type === 'stage_start') return 'text-info';
+		return 'text-text-dim';
+	}
+
+	const agentColorMap: Record<string, string> = {
+		'claude-sonnet': 'text-scout',
+		'codex-gpt': 'text-reviewer',
+		'automated': 'text-gatekeeper',
+		'coordinator': 'text-accent',
+	};
+
+	function agentColor(agent: string | null): string {
+		if (!agent) return 'text-text-dim';
+		for (const [key, val] of Object.entries(agentColorMap)) {
+			if (agent.includes(key)) return val;
+		}
+		return 'text-text-muted';
 	}
 </script>
 
-<div class="p-8">
-	<div class="mb-8">
-		<h1 class="text-xl font-semibold text-text">Activity</h1>
-		<p class="text-sm text-text-muted mt-1">Pipeline event log</p>
+<div class="p-6">
+	<div class="flex items-center justify-between mb-6">
+		<div>
+			<h1 class="text-lg font-semibold text-text">Activity</h1>
+			<p class="text-xs text-text-muted mt-0.5">Pipeline event log</p>
+		</div>
+		<div class="flex items-center gap-2">
+			<span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+			<span class="text-[10px] text-text-dim">Auto-refresh</span>
+		</div>
 	</div>
 
-	<div class="space-y-1">
-		{#each data.events as event}
-			<div class="flex items-start gap-4 px-4 py-3 rounded-lg hover:bg-bg-card transition-colors">
-				<span class={`text-sm mt-0.5 ${typeColor(event.type)}`}>{typeIcon(event.type)}</span>
+	<div class="bg-bg-card border border-border rounded-lg overflow-hidden">
+		{#each data.events as event, i}
+			<div class="flex items-start gap-4 px-4 py-3 hover:bg-bg-hover transition-colors {i < data.events.length - 1 ? 'border-b border-border/50' : ''}">
+				<span class="text-sm mt-0.5 w-4 text-center {typeColor(event.type)}">{typeIcon(event.type)}</span>
 				<div class="flex-1 min-w-0">
-					<div class="flex items-center gap-2">
-						<span class="text-sm text-text">{event.message}</span>
-					</div>
+					<p class="text-xs text-text leading-snug">{event.message}</p>
 					<div class="flex items-center gap-3 mt-1">
 						{#if event.task_title}
-							<span class="text-xs text-text-dim font-mono">{event.task_id}</span>
-							<span class="text-xs text-text-muted">{event.task_title}</span>
+							<span class="text-[10px] text-text-dim font-mono">{event.task_id}</span>
+							<span class="text-[10px] text-text-muted">{event.task_title}</span>
 						{/if}
 						{#if event.agent}
-							<span class="text-xs text-text-dim">· {event.agent}</span>
+							<span class="text-[10px] {agentColor(event.agent)}">· {event.agent}</span>
 						{/if}
 					</div>
 				</div>
-				<span class="text-xs text-text-dim shrink-0">{timeAgo(event.created_at)}</span>
+				<span class="text-[10px] text-text-dim shrink-0 mt-0.5">{timeAgo(event.created_at)}</span>
 			</div>
 		{/each}
+		{#if data.events.length === 0}
+			<div class="px-4 py-12 text-center text-xs text-text-dim">No events recorded</div>
+		{/if}
 	</div>
 </div>

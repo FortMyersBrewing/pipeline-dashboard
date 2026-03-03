@@ -72,14 +72,17 @@ function initDb(db: Database.Database) {
 		);
 	`);
 
-	// Seed data if empty
+	// Ensure tapwright project exists
 	const count = db.prepare('SELECT COUNT(*) as n FROM projects').get() as { n: number };
 	if (count.n === 0) {
-		seed(db);
+		db.prepare(`INSERT INTO projects (id, name, repo_path, repo_url) VALUES (?, ?, ?, ?)`).run(
+			'tapwright', 'Tapwright', '~/projects/brewplatform',
+			'https://github.com/FortMyersBrewing/brewplatform'
+		);
 	}
 }
 
-function seed(db: Database.Database) {
+function _seed_disabled(db: Database.Database) {
 	db.prepare(`INSERT INTO projects (id, name, repo_path, repo_url) VALUES (?, ?, ?, ?)`).run(
 		'tapwright',
 		'Tapwright',

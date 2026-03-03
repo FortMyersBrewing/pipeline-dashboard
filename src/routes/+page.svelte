@@ -1,25 +1,59 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { STAGES, STAGE_LABELS } from '$lib/types';
 	import type { Task, Run } from '$lib/types';
 
 	let { data }: { data: PageData } = $props();
 
-	const inProgress = $derived(data.tasks.filter((t: Task) => !['queued', 'done', 'failed', 'paused'].includes(t.status)));
-	const queued = $derived(data.tasks.filter((t: Task) => t.status === 'queued'));
-	const completed = $derived(data.tasks.filter((t: Task) => ['done', 'failed', 'paused'].includes(t.status)));
+	// Kanban columns
+	const backlog = $derived(data.tasks.filter((t: Task) => t.status === 'queued'));
+	const inProgress = $derived(data.tasks.filter((t: Task) => ['scouting', 'building', 'gating'].includes(t.status)));
+	const review = $derived(data.tasks.filter((t: Task) => ['reviewing', 'testing'].includes(t.status)));
+	const complete = $derived(data.tasks.filter((t: Task) => ['done', 'failed', 'paused'].includes(t.status)));
 
-	let selectedTask: (Task & { runs?: Run[] }) | null = $state(null);
+	let filterProject = $state('all');
+	let showNewTask = $state(false);
+	let newTask = $state({ id: '', title: '', description: '', project_id: '', priority: 'medium' });
 
-	function getStageStatus(task: Task & { runs?: Run[] }, stage: string): 'idle' | 'running' | 'passed' | 'failed' {
-		const runs = task.runs || [];
-		const stageRuns = runs.filter((r: Run) => r.stage === stage && r.attempt === task.attempt);
-		if (stageRuns.length === 0) return 'idle';
-		const latest = stageRuns[stageRuns.length - 1];
-		if (latest.status === 'running') return 'running';
-		if (latest.status === 'passed') return 'passed';
-		return 'failed';
+	// Auto-refresh
+	let refreshInterval: ReturnType<typeof setInterval>;
+	onMount(() => {
+		refreshInterval = setInterval(() => invalidateAll(), 5000);
+	});
+	onDestroy(() => clearInterval(refreshInterval));
+
+	// Live log streaming
+	let logLines: string[] = $state([]);
+	let logOpen = $state(false);
+	let logTaskId: string | null = $state(null);
+	let eventSource: EventSource | null = $state(null);
+	let logContainer: HTMLElement | null = $state(null);
+
+	function toggleLog(taskId: string) {
+		if (logOpen && logTaskId === taskId) {
+			eventSource?.close();
+			logOpen = false;
+			logTaskId = null;
+			logLines = [];
+			return;
+		}
+		eventSource?.close();
+		logLines = [];
+		logTaskId = taskId;
+		logOpen = true;
+		eventSource = new EventSource(`/api/logs/${taskId}`);
+		eventSource.onmessage = (e) => {
+			const data = JSON.parse(e.data);
+			if (data.line) {
+				logLines = [...logLines, data.line];
+				setTimeout(() => logContainer?.scrollTo(0, logContainer.scrollHeight), 10);
+			}
+		};
 	}
+
+	onDestroy(() => eventSource?.close());
 
 	function timeAgo(date: string): string {
 		const ms = Date.now() - new Date(date).getTime();
@@ -31,166 +65,232 @@
 		return `${Math.floor(hr / 24)}d ago`;
 	}
 
-	function priorityColor(p: string): string {
-		if (p === 'urgent') return 'text-error';
-		if (p === 'high') return 'text-warning';
-		return 'text-text-dim';
+	function priorityDot(p: string): string {
+		if (p === 'urgent') return 'bg-error';
+		if (p === 'high') return 'bg-warning';
+		if (p === 'medium') return 'bg-info';
+		return 'bg-text-dim';
 	}
 
-	function statusColor(s: string): string {
-		if (s === 'done') return 'bg-[rgba(34,197,94,0.1)] text-[#22C55E]';
-		if (s === 'failed') return 'bg-[rgba(239,68,68,0.1)] text-[#EF4444]';
-		if (s === 'paused') return 'bg-[rgba(234,179,8,0.1)] text-[#EAB308]';
-		if (s === 'queued') return 'bg-[rgba(113,113,122,0.1)] text-[#71717A]';
-		return 'bg-[rgba(139,92,246,0.1)] text-[#8B5CF6]';
+	function statusBadgeColor(s: string): string {
+		if (s === 'done') return 'bg-success/10 text-success';
+		if (s === 'failed') return 'bg-error/10 text-error';
+		if (s === 'paused') return 'bg-warning/10 text-warning';
+		return '';
 	}
+
+	function agentAvatar(task: Task): string {
+		if (!task.current_stage) return '◆';
+		const map: Record<string, string> = { scout: '🔍', builder: '🏗', gatekeeper: '🚦', reviewer: '👁', qa: '🧪' };
+		return map[task.current_stage] || '◆';
+	}
+
+	async function createTask() {
+		if (!newTask.title || !newTask.project_id) return;
+		const id = newTask.id || `task-${Date.now().toString(36)}`;
+		await fetch('/api/tasks', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ ...newTask, id }),
+		});
+		showNewTask = false;
+		newTask = { id: '', title: '', description: '', project_id: '', priority: 'medium' };
+		invalidateAll();
+	}
+
+	const columns = $derived([
+		{ title: 'Backlog', tasks: backlog, color: 'text-text-dim' },
+		{ title: 'In Progress', tasks: inProgress, color: 'text-info' },
+		{ title: 'Review', tasks: review, color: 'text-warning' },
+		{ title: 'Complete', tasks: complete, color: 'text-success' },
+	]);
 </script>
 
-<div class="p-8">
-	<div class="flex items-center justify-between mb-8">
-		<div>
-			<h1 class="text-xl font-semibold text-text">Pipeline</h1>
-			<p class="text-sm text-text-muted mt-1">Active development tasks</p>
+<div class="flex flex-col h-full">
+	<!-- Stats bar -->
+	<div class="border-b border-border px-6 py-3 flex items-center gap-6 shrink-0">
+		<div class="flex items-center gap-6 text-xs">
+			<div class="flex items-center gap-2">
+				<span class="text-text-dim">This week</span>
+				<span class="text-text font-semibold text-sm">{data.stats.thisWeek}</span>
+			</div>
+			<div class="w-px h-4 bg-border"></div>
+			<div class="flex items-center gap-2">
+				<span class="text-text-dim">In progress</span>
+				<span class="text-info font-semibold text-sm">{data.stats.inProgress}</span>
+			</div>
+			<div class="w-px h-4 bg-border"></div>
+			<div class="flex items-center gap-2">
+				<span class="text-text-dim">Total</span>
+				<span class="text-text font-semibold text-sm">{data.stats.total}</span>
+			</div>
+			<div class="w-px h-4 bg-border"></div>
+			<div class="flex items-center gap-2">
+				<span class="text-text-dim">Completion</span>
+				<span class="text-accent font-semibold text-sm">{data.stats.completion}%</span>
+			</div>
 		</div>
-		<div class="flex items-center gap-2 text-xs text-text-dim">
-			<span class="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse"></span>
-			Auto-refresh · 5s
+		<div class="ml-auto flex items-center gap-2">
+			<span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+			<span class="text-[10px] text-text-dim">Live · 5s</span>
 		</div>
 	</div>
 
-	<!-- In Progress -->
-	{#if inProgress.length > 0}
-		<section class="mb-8">
-			<h2 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">In Progress</h2>
-			<div class="space-y-2">
-				{#each inProgress as task}
-					<button
-						onclick={() => selectedTask = selectedTask?.id === task.id ? null : task}
-						class="w-full text-left border border-border rounded-lg p-4 hover:border-border-light hover:bg-bg-card transition-all cursor-pointer"
-					>
-						<div class="flex items-center justify-between mb-3">
-							<div class="flex items-center gap-3">
-								<span class={`text-xs font-mono ${priorityColor(task.priority)}`}>{task.id}</span>
-								<span class="text-sm font-medium text-text">{task.title}</span>
-							</div>
-							<div class="flex items-center gap-3">
-								<span class="text-xs text-text-dim">Attempt {task.attempt}/{task.max_attempts}</span>
-								<span class={`text-xs px-2 py-0.5 rounded-full ${statusColor(task.status)}`}>{task.status}</span>
-							</div>
-						</div>
+	<!-- Action bar -->
+	<div class="px-6 py-3 flex items-center gap-3 shrink-0 border-b border-border/50">
+		<button
+			onclick={() => showNewTask = !showNewTask}
+			class="px-4 py-1.5 rounded-full bg-accent text-bg text-xs font-medium hover:bg-accent-hover transition-colors"
+		>
+			+ New task
+		</button>
 
-						<!-- Stage dots -->
-						<div class="flex items-center gap-1">
-							{#each STAGES as stage, i}
-								{@const s = getStageStatus(task, stage)}
-								<div class="flex items-center gap-1">
-									<div class="flex flex-col items-center">
-										<div
-											class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium transition-all
-												{s === 'running' ? 'bg-[rgba(139,92,246,0.2)] text-[#8B5CF6] ring-2 ring-[#8B5CF6] animate-pulse' :
-												 s === 'passed' ? 'bg-[rgba(34,197,94,0.2)] text-[#22C55E]' :
-												 s === 'failed' ? 'bg-[rgba(239,68,68,0.2)] text-[#EF4444]' :
-												 'bg-[rgba(113,113,122,0.1)] text-[#52525B]'}"
-										>
-											{s === 'passed' ? '✓' : s === 'failed' ? '✗' : s === 'running' ? '●' : (i + 1)}
-										</div>
-										<span class="text-[10px] mt-1 {s === 'running' ? 'text-[#8B5CF6]' : s === 'passed' ? 'text-[#22C55E]' : 'text-[#52525B]'}">{STAGE_LABELS[stage]}</span>
-									</div>
-									{#if i < STAGES.length - 1}
-										<div class="w-8 h-px mx-1 {s === 'passed' ? 'bg-[#22C55E]' : 'bg-[#1E1E2E]'} mb-4"></div>
-									{/if}
-								</div>
+		<div class="flex items-center gap-2 ml-4">
+			<select
+				bind:value={filterProject}
+				class="bg-bg-card border border-border rounded-md px-3 py-1.5 text-xs text-text-muted focus:outline-none focus:border-accent"
+			>
+				<option value="all">All projects</option>
+				{#each data.projects as project}
+					<option value={project.id}>{project.name}</option>
+				{/each}
+			</select>
+		</div>
+	</div>
+
+	<!-- New task form -->
+	{#if showNewTask}
+		<div class="px-6 py-4 border-b border-border bg-bg-card/50">
+			<div class="flex items-start gap-3 max-w-2xl">
+				<div class="flex-1 space-y-2">
+					<input
+						bind:value={newTask.title}
+						placeholder="Task title"
+						class="w-full bg-bg border border-border rounded-md px-3 py-2 text-sm text-text placeholder:text-text-dim focus:outline-none focus:border-accent"
+					/>
+					<textarea
+						bind:value={newTask.description}
+						placeholder="Description (optional)"
+						rows="2"
+						class="w-full bg-bg border border-border rounded-md px-3 py-2 text-xs text-text placeholder:text-text-dim focus:outline-none focus:border-accent resize-none"
+					></textarea>
+					<div class="flex items-center gap-2">
+						<select bind:value={newTask.project_id} class="bg-bg border border-border rounded-md px-3 py-1.5 text-xs text-text-muted focus:outline-none focus:border-accent">
+							<option value="">Select project</option>
+							{#each data.projects as project}
+								<option value={project.id}>{project.name}</option>
 							{/each}
-						</div>
-					</button>
-
-					<!-- Detail panel -->
-					{#if selectedTask?.id === task.id}
-						<div class="border border-border-light rounded-lg p-6 bg-bg-card ml-4 animate-in">
-							<div class="flex items-center justify-between mb-4">
-								<h3 class="text-sm font-semibold text-text">{task.title}</h3>
-								<button onclick={() => selectedTask = null} class="text-text-dim hover:text-text text-sm">✕</button>
-							</div>
-							{#if task.description}
-								<p class="text-sm text-text-muted mb-4">{task.description}</p>
-							{/if}
-
-							<!-- Runs timeline -->
-							<h4 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Pipeline Runs</h4>
-							<div class="space-y-1.5 mb-4">
-								{#each (task.runs || []) as run}
-									<div class="flex items-center gap-3 text-xs">
-										<span class="text-text-dim font-mono w-6">#{run.attempt}</span>
-										<span class="w-20 text-text-muted">{STAGE_LABELS[run.stage] || run.stage}</span>
-										<span class="w-20">{run.agent || '—'}</span>
-										<span class="{run.status === 'passed' ? 'text-[#22C55E]' : run.status === 'running' ? 'text-[#8B5CF6]' : run.status === 'rejected' ? 'text-[#EF4444]' : 'text-[#EF4444]'}">
-											{run.status}
-										</span>
-										{#if run.duration_ms}
-											<span class="text-text-dim">{Math.round(run.duration_ms / 1000)}s</span>
-										{/if}
-										{#if run.result}
-											<span class="text-text-dim truncate max-w-xs" title={run.result}>{run.result}</span>
-										{/if}
-									</div>
-								{/each}
-							</div>
-
-							<!-- Recent events -->
-							<h4 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-2">Recent Events</h4>
-							<div class="space-y-1.5">
-								{#each (task.events || []).slice(0, 5) as event}
-									<div class="flex items-center gap-3 text-xs">
-										<span class="text-text-dim">{timeAgo(event.created_at)}</span>
-										<span class="text-text-muted">{event.agent || ''}</span>
-										<span class="text-text">{event.message}</span>
-									</div>
-								{/each}
-							</div>
-						</div>
-					{/if}
-				{/each}
-			</div>
-		</section>
-	{/if}
-
-	<!-- Queued -->
-	{#if queued.length > 0}
-		<section class="mb-8">
-			<h2 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">Queued</h2>
-			<div class="space-y-2">
-				{#each queued as task}
-					<div class="border border-border rounded-lg p-4 opacity-60 hover:opacity-80 transition-opacity">
-						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-3">
-								<span class={`text-xs font-mono ${priorityColor(task.priority)}`}>{task.id}</span>
-								<span class="text-sm text-text-muted">{task.title}</span>
-							</div>
-							<span class={`text-xs px-2 py-0.5 rounded-full ${statusColor('queued')}`}>queued</span>
-						</div>
+						</select>
+						<select bind:value={newTask.priority} class="bg-bg border border-border rounded-md px-3 py-1.5 text-xs text-text-muted focus:outline-none focus:border-accent">
+							<option value="low">Low</option>
+							<option value="medium">Medium</option>
+							<option value="high">High</option>
+							<option value="urgent">Urgent</option>
+						</select>
+						<button onclick={createTask} class="px-4 py-1.5 rounded-md bg-accent text-bg text-xs font-medium hover:bg-accent-hover">Create</button>
+						<button onclick={() => showNewTask = false} class="px-3 py-1.5 text-xs text-text-dim hover:text-text">Cancel</button>
 					</div>
-				{/each}
+				</div>
 			</div>
-		</section>
+		</div>
 	{/if}
 
-	<!-- Completed -->
-	{#if completed.length > 0}
-		<section>
-			<h2 class="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">Completed</h2>
-			<div class="space-y-2">
-				{#each completed as task}
-					<div class="border border-border rounded-lg p-4 opacity-50 hover:opacity-70 transition-opacity">
-						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-3">
-								<span class="text-xs font-mono text-text-dim">{task.id}</span>
-								<span class="text-sm text-text-muted">{task.title}</span>
-							</div>
-							<span class={`text-xs px-2 py-0.5 rounded-full ${statusColor(task.status)}`}>{task.status}</span>
-						</div>
+	<!-- Kanban board -->
+	<div class="flex-1 overflow-hidden px-4 py-4">
+		<div class="flex gap-4 h-full">
+			{#each columns as col}
+				{@const filteredTasks = filterProject === 'all' ? col.tasks : col.tasks.filter((t: Task) => t.project_id === filterProject)}
+				<div class="flex-1 min-w-[240px] flex flex-col">
+					<!-- Column header -->
+					<div class="flex items-center gap-2 mb-3 px-1">
+						<span class="text-xs font-semibold uppercase tracking-wider {col.color}">{col.title}</span>
+						<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-card text-text-dim">{filteredTasks.length}</span>
 					</div>
-				{/each}
-			</div>
-		</section>
-	{/if}
+
+					<!-- Cards -->
+					<div class="flex-1 overflow-y-auto kanban-col space-y-2 pr-1">
+						{#each filteredTasks as task}
+							<div class="bg-bg-card border border-border rounded-lg p-3.5 hover:border-border-light hover:bg-bg-hover transition-all cursor-pointer group">
+								<div class="flex items-start gap-2 mb-2">
+									<span class="w-2 h-2 rounded-full mt-1.5 shrink-0 {priorityDot(task.priority)}"></span>
+									<h3 class="text-[13px] font-medium text-text leading-snug">{task.title}</h3>
+								</div>
+
+								{#if task.description}
+									<p class="text-[11px] text-text-muted leading-relaxed mb-3 ml-4 line-clamp-2">{task.description}</p>
+								{/if}
+
+								<div class="flex items-center justify-between ml-4">
+									<div class="flex items-center gap-2">
+										<span class="text-xs" title={task.current_stage || 'queued'}>{agentAvatar(task)}</span>
+										<span class="text-[10px] px-1.5 py-0.5 rounded bg-bg/60 text-text-dim">{task.project_id}</span>
+									</div>
+									<span class="text-[10px] text-text-dim">{timeAgo(task.updated_at)}</span>
+								</div>
+
+								{#if !['queued', 'done', 'failed', 'paused'].includes(task.status)}
+									<div class="flex items-center gap-0.5 mt-2.5 ml-4">
+										{#each STAGES as stage}
+											{@const runs = (task.runs || []).filter((r: Run) => r.stage === stage && r.attempt === task.attempt)}
+											{@const latest = runs.length > 0 ? runs[runs.length - 1] : null}
+											{@const s = !latest ? 'idle' : latest.status === 'running' ? 'running' : latest.status === 'passed' ? 'passed' : 'failed'}
+											<div
+												class="h-1 flex-1 rounded-full transition-all
+													{s === 'passed' ? 'bg-success' : s === 'running' ? 'bg-info animate-pulse' : s === 'failed' ? 'bg-error' : 'bg-border'}"
+												title="{STAGE_LABELS[stage]}: {s}"
+											></div>
+										{/each}
+									</div>
+								{/if}
+
+								{#if ['done', 'failed', 'paused'].includes(task.status)}
+									<div class="mt-2 ml-4">
+										<span class="text-[10px] px-2 py-0.5 rounded-full {statusBadgeColor(task.status)}">{task.status}</span>
+									</div>
+								{/if}
+
+								<div class="mt-2 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
+									<button
+										onclick={(e) => { e.stopPropagation(); toggleLog(task.id); }}
+										class="text-[10px] px-2 py-0.5 rounded border transition-colors
+											{logOpen && logTaskId === task.id
+												? 'border-accent text-accent bg-accent/10'
+												: 'border-border text-text-dim hover:text-text hover:border-border-light'}"
+									>
+										{logOpen && logTaskId === task.id ? '■ Stop' : '▶ Log'}
+									</button>
+								</div>
+							</div>
+						{/each}
+						{#if filteredTasks.length === 0}
+							<div class="text-center py-8 text-xs text-text-dim">No tasks</div>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		</div>
+	</div>
 </div>
+
+<!-- Live Log Panel -->
+{#if logOpen}
+	<section class="fixed bottom-0 left-[180px] right-[250px] border-t border-border bg-bg-sidebar z-50 max-lg:right-0">
+		<div class="flex items-center justify-between px-4 py-2 border-b border-border">
+			<div class="flex items-center gap-2">
+				<span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+				<span class="text-xs font-medium text-text">Live Output</span>
+				<span class="text-xs text-text-dim font-mono">{logTaskId}</span>
+				<span class="text-[10px] text-text-dim">{logLines.length} lines</span>
+			</div>
+			<button onclick={() => toggleLog(logTaskId || '')} class="text-xs text-text-dim hover:text-text">✕</button>
+		</div>
+		<div
+			bind:this={logContainer}
+			class="h-48 overflow-y-auto p-3 font-mono text-xs leading-5 text-text-muted"
+		>
+			{#each logLines as line}
+				<div class="{line.includes('✓') || line.includes('PASSED') ? 'text-success' : line.includes('✗') || line.includes('FAILED') ? 'text-error' : line.includes('▶') || line.includes('Attempt') ? 'text-info' : ''}">{line}</div>
+			{/each}
+		</div>
+	</section>
+{/if}

@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getDb } from '$lib/db';
 
 export interface Agent {
 	id: string;
@@ -95,8 +96,24 @@ const agents: Agent[] = [
 ];
 
 export const GET: RequestHandler = async () => {
-	// TODO: In the future, we can wire this to read from openclaw.json
-	// and fetch real-time status from the OpenClaw API
-	
-	return json({ agents });
+	// Read real-time status from agent_status table
+	try {
+		const statuses = getDb().prepare('SELECT agent_id, status, current_task, last_updated FROM agent_status').all() as Array<{agent_id: string, status: string, current_task: string | null, last_updated: string | null}>;
+		const statusMap = new Map(statuses.map(s => [s.agent_id, s]));
+		
+		const enriched = agents.map(a => {
+			const live = statusMap.get(a.id);
+			return {
+				...a,
+				status: live?.status || a.status,
+				lastActivity: live?.current_task || a.lastActivity,
+				lastUpdated: live?.last_updated || null
+			};
+		});
+		
+		return json({ agents: enriched });
+	} catch (e) {
+		console.error('Agent status DB error:', e);
+		return json({ agents });
+	}
 };

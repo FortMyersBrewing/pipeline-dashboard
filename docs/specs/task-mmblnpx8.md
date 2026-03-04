@@ -1,164 +1,142 @@
-# Implementation Specification: Complete Column Sort Order Fix
+# Implementation Specification: Complete Column Sort Order Fix (CORRECTED)
 
 **Task ID:** task-mmblnpx8  
-**Version:** 1  
+**Version:** 2 (Corrected after v1 failure)  
 **Date:** 2026-03-04  
 **Stage:** Scout  
 
+## CRITICAL CORRECTION FROM V1
+
+**❌ PREVIOUS ERROR:** Builder modified `/src/routes/api/tasks/+server.ts` (API endpoint)  
+**✅ CORRECT TARGET:** Must modify `/src/routes/+page.server.ts` (main dashboard data loader)  
+
+**WHY THE CORRECTION IS NEEDED:**
+- The main dashboard `/` loads data directly via `/src/routes/+page.server.ts`
+- The API endpoint `/src/routes/api/tasks/+server.ts` is NOT used by the main dashboard
+- Fixing the wrong file leaves the main dashboard's Complete column unchanged
+
 ## Problem Analysis
 
-The "COMPLETE" column on the tasks page currently sorts tasks alphabetically/by priority instead of showing the newest completed tasks on top. This makes it difficult to track recent task completions.
+### Current Issue
+- Main dashboard Complete column sorts by priority first, then updated_at
+- Should sort by completed_at DESC to show newest completions on top
+- **Root cause:** Wrong ORDER BY clause in `/src/routes/+page.server.ts` lines 7-11
 
-### Current Behavior
-- All tasks are sorted globally using: `ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, updated_at DESC`
-- The Complete column shows tasks with statuses: `['done', 'failed', 'paused']`
-- Completed tasks appear in priority order, not completion time order
-
-### Expected Behavior
-- Complete column should show newest completed tasks first
-- Sort order should be by `completed_at DESC` for completed tasks
-- Other columns can maintain current sorting
-
-## Technical Investigation
-
-### Codebase Structure
-- **Main Dashboard:** `src/routes/+page.svelte` (SvelteKit app)
-- **Data Loading:** `src/routes/+page.server.ts` 
-- **Database Schema:** `src/lib/db.ts` - tasks table has `completed_at DATETIME` field
-- **Task Updates:** `src/routes/api/tasks/[id]/+server.ts` PATCH endpoint supports `completed_at`
-
-### Current Implementation
+### Current Implementation (WRONG FILE WAS TARGETED)
 ```typescript
-// In +page.server.ts
+// File: /src/routes/+page.server.ts (THIS is what needs to be fixed)
+// Lines 7-11:
 const tasks = db.prepare(`
     SELECT tasks.*, projects.name as project_name, projects.slug as project_slug, projects.stack_type as project_stack_type 
     FROM tasks 
     LEFT JOIN projects ON tasks.project_id = projects.id
     ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, updated_at DESC
 `).all() as Task[];
-
-// In +page.svelte  
-const complete = $derived(data.tasks.filter((t: Task) => ['done', 'failed', 'paused'].includes(t.status)));
 ```
 
-## Implementation Plan
+## EXACT IMPLEMENTATION REQUIRED
 
-### Option 1: Client-Side Sorting (Recommended)
-**Pros:** Minimal impact, preserves other sorting, easy to implement  
-**Cons:** Slight client-side overhead  
+### File to Modify: `/src/routes/+page.server.ts`
 
-Modify `src/routes/+page.svelte` to sort the complete column specifically:
-
+**BEFORE (current code on line 7-11):**
 ```typescript
-const complete = $derived(
-    data.tasks
-        .filter((t: Task) => ['done', 'failed', 'paused'].includes(t.status))
-        .sort((a, b) => {
-            // Sort by completed_at DESC, fallback to updated_at DESC if no completed_at
-            const aDate = a.completed_at ? new Date(a.completed_at) : new Date(a.updated_at);
-            const bDate = b.completed_at ? new Date(b.completed_at) : new Date(b.updated_at);
-            return bDate.getTime() - aDate.getTime();
-        })
-);
+const tasks = db.prepare(`
+    SELECT tasks.*, projects.name as project_name, projects.slug as project_slug, projects.stack_type as project_stack_type 
+    FROM tasks 
+    LEFT JOIN projects ON tasks.project_id = projects.id
+    ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, updated_at DESC
+`).all() as Task[];
 ```
 
-### Option 2: Server-Side Conditional Sorting
-**Pros:** More efficient, handles sorting at database level  
-**Cons:** More complex SQL, potential impact on other functionality  
-
-Modify the SQL query in `src/routes/+page.server.ts` to use conditional ordering:
-
-```sql
-SELECT tasks.*, projects.name as project_name, projects.slug as project_slug, projects.stack_type as project_stack_type 
-FROM tasks 
-LEFT JOIN projects ON tasks.project_id = projects.id
-ORDER BY 
-    CASE 
-        WHEN status IN ('done', 'failed', 'paused') THEN 
-            CASE WHEN completed_at IS NOT NULL THEN completed_at ELSE updated_at END
-        ELSE 
-            CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END
-    END DESC,
-    CASE WHEN status NOT IN ('done', 'failed', 'paused') THEN updated_at END DESC
-```
-
-## Critical Implementation Details
-
-### 1. Ensure `completed_at` is Set
-**Issue:** The `completed_at` field might not be automatically set when tasks transition to completed states.
-
-**Investigation Required:** Check if there's logic that sets `completed_at` when task status changes to `done`, `failed`, or `paused`.
-
-**Potential Fix:** Add automatic `completed_at` setting in task status transitions:
-
+**AFTER (required change):**
 ```typescript
-// In PATCH handler or wherever task status is updated
-if (['done', 'failed', 'paused'].includes(newStatus) && !body.completed_at) {
-    body.completed_at = new Date().toISOString();
-}
+const tasks = db.prepare(`
+    SELECT tasks.*, projects.name as project_name, projects.slug as project_slug, projects.stack_type as project_stack_type 
+    FROM tasks 
+    LEFT JOIN projects ON tasks.project_id = projects.id
+    ORDER BY 
+        CASE 
+            WHEN status IN ('done', 'failed', 'paused') THEN 
+                COALESCE(completed_at, updated_at)
+            ELSE 
+                (CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END) || '-' || updated_at
+        END DESC
+`).all() as Task[];
 ```
 
-### 2. Handle Missing `completed_at` Values
-For tasks that were completed before this fix, `completed_at` might be null.
+### Implementation Details
 
-**Fallback Strategy:** Use `updated_at` when `completed_at` is null in the sorting logic.
+**Key Changes:**
+1. **Conditional sorting**: Use different ORDER BY logic based on task status
+2. **Completed tasks**: Sort by `completed_at DESC` (with `updated_at` fallback)  
+3. **Non-completed tasks**: Maintain current priority + updated_at sorting
+4. **Fallback handling**: `COALESCE(completed_at, updated_at)` handles missing completed_at
 
-### 3. Database Migration (if needed)
-If many existing completed tasks have null `completed_at`, consider a one-time migration:
+### Why This Approach
 
-```sql
-UPDATE tasks 
-SET completed_at = updated_at 
-WHERE status IN ('done', 'failed', 'paused') 
-AND completed_at IS NULL;
+1. **Targeted fix**: Only affects completed tasks in Complete column
+2. **Preserves existing behavior**: Other columns (Backlog, In Progress, Review) keep current sorting
+3. **Handles edge cases**: Uses updated_at when completed_at is null
+4. **Database-level**: More efficient than client-side sorting
+
+## Data Flow Verification
+
+```mermaid
+graph TD
+    A[User visits /] --> B[+page.server.ts loads]
+    B --> C[SQL query with new ORDER BY]
+    C --> D[Returns sorted tasks array]
+    D --> E[+page.svelte filters tasks]
+    E --> F[Complete column shows newest first]
 ```
+
+**Critical Path:**
+1. User visits main dashboard (`/`)
+2. SvelteKit calls `+page.server.ts` load function
+3. **NEW SQL** query sorts tasks with completed tasks by completed_at DESC
+4. Frontend filters tasks into columns using existing logic
+5. Complete column automatically shows newest completions first
+
+## Files Modified
+
+### Primary Target: `/src/routes/+page.server.ts`
+- **Lines 7-11**: Replace ORDER BY clause with conditional sorting
+- **No other changes needed in this file**
+
+### Files NOT to Modify
+- ❌ `/src/routes/api/tasks/+server.ts` (this was the wrong target in v1)
+- ❌ `/src/routes/+page.svelte` (frontend filtering logic is correct)
 
 ## Testing Strategy
 
+### Manual Verification Steps
+1. **Check current dashboard**: Verify Complete column shows old sorting
+2. **Apply the fix**: Modify only `/src/routes/+page.server.ts` 
+3. **Refresh dashboard**: Verify Complete column now shows newest completions first
+4. **Verify other columns**: Ensure Backlog, In Progress, Review maintain current sorting
+
 ### Test Cases
-1. **New Completions:** Create tasks, complete them in sequence, verify Complete column shows newest first
-2. **Mixed Completion Times:** Tasks completed at different times should sort correctly
-3. **Missing completed_at:** Tasks with null `completed_at` should fall back to `updated_at`
-4. **Other Columns:** Verify Backlog, In Progress, Review columns still sort correctly
-5. **Priority Override:** Within same completion time, verify priority still matters (if desired)
-
-### Manual Test Steps
-1. Complete several tasks with different completion times
-2. Refresh the dashboard
-3. Verify Complete column shows most recently completed tasks at the top
-4. Check that clicking between columns preserves individual sorting
-
-## Files to Modify
-
-### Primary Changes
-- `src/routes/+page.svelte` - Update `complete` derived value with sorting logic
-
-### Secondary Changes (if Option 2 chosen)
-- `src/routes/+page.server.ts` - Modify SQL query for conditional sorting
-
-### Potential Additional Changes
-- `src/routes/api/tasks/[id]/+server.ts` - Ensure `completed_at` is set on status transitions
-- Add database migration script if needed for existing data
-
-## Risk Assessment
-
-**Low Risk:** Client-side sorting (Option 1) has minimal impact  
-**Medium Risk:** Server-side changes could affect performance or other features  
-**Data Risk:** Missing `completed_at` values could cause incorrect ordering  
+1. **Recently completed tasks**: Should appear at top of Complete column
+2. **Mixed statuses**: Non-completed tasks should maintain priority sorting
+3. **Missing completed_at**: Should fall back to updated_at for sorting
+4. **Cross-column consistency**: Same task should sort appropriately in each column
 
 ## Success Criteria
 
-✅ Complete column shows newest completed tasks first  
-✅ Other columns maintain current sorting behavior  
-✅ No performance degradation  
+✅ Complete column shows completed tasks with newest on top  
+✅ Backlog/In Progress/Review columns maintain current priority-based sorting  
+✅ Main dashboard loads data correctly from modified +page.server.ts  
+✅ No changes needed to API endpoints or frontend filtering logic  
 ✅ Handles edge cases (missing completed_at values)  
-✅ Works across different task statuses (done, failed, paused)
 
-## Next Steps for Builder Stage
+## Builder Instructions
 
-1. Choose implementation approach (recommend Option 1 for safety)
-2. Implement the sorting fix
-3. Test with existing data to verify completed_at field population  
-4. Add automatic completed_at setting if missing
-5. Run manual tests to verify functionality
-6. Consider adding visual indicator for completion time in UI
+**CRITICAL:** Only modify `/src/routes/+page.server.ts`
+
+1. **Open file**: `/src/routes/+page.server.ts`
+2. **Find lines 7-11**: The db.prepare() SQL query  
+3. **Replace ORDER BY clause**: Use the conditional sorting logic provided above
+4. **Test**: Verify dashboard shows completed tasks newest-first in Complete column
+5. **Do NOT modify**: Any API endpoints or frontend files
+
+The fix is a single SQL query change in the main dashboard data loader.

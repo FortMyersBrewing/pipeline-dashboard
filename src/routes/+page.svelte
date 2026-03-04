@@ -5,6 +5,7 @@
 	import type { PageData } from './$types';
 	import { STAGES, STAGE_LABELS, STACK_TYPE_COLORS } from '$lib/types';
 	import type { Task, Run } from '$lib/types';
+	import { formatTimestamp } from '$lib/time-utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -81,15 +82,7 @@
 
 	onDestroy(() => eventSource?.close());
 
-	function timeAgo(date: string): string {
-		const ms = Date.now() - new Date(date).getTime();
-		const min = Math.floor(ms / 60000);
-		if (min < 1) return 'just now';
-		if (min < 60) return `${min}m ago`;
-		const hr = Math.floor(min / 60);
-		if (hr < 24) return `${hr}h ago`;
-		return `${Math.floor(hr / 24)}d ago`;
-	}
+
 
 	function priorityDot(p: string): string {
 		if (p === 'urgent') return 'bg-error';
@@ -395,7 +388,7 @@
 												▶ Start
 											</button>
 										{/if}
-										<span class="text-[10px] text-text-dim">{timeAgo(task.updated_at)}</span>
+										<span class="text-[10px] text-text-dim">{formatTimestamp(task.updated_at)}</span>
 									</div>
 								</div>
 
@@ -551,12 +544,12 @@
 					
 					<div class="flex items-center gap-2">
 						<span class="text-text-dim">Created:</span>
-						<span class="text-text-muted">{new Date(selectedTask.created_at).toLocaleDateString()}</span>
+						<span class="text-text-muted">{formatTimestamp(selectedTask.created_at)}</span>
 					</div>
 					
 					<div class="flex items-center gap-2">
 						<span class="text-text-dim">Updated:</span>
-						<span class="text-text-muted">{timeAgo(selectedTask.updated_at)}</span>
+						<span class="text-text-muted">{formatTimestamp(selectedTask.updated_at)}</span>
 					</div>
 					
 					{#if selectedTask.assignee}
@@ -606,7 +599,7 @@
 									
 									<div class="flex items-center gap-4 text-xs text-text-muted">
 										<span>Attempt {run.attempt}</span>
-										<span>Started: {new Date(run.started_at).toLocaleString()}</span>
+										<span>Started: {formatTimestamp(run.started_at)}</span>
 										{#if run.finished_at}
 											<span>Duration: {formatDuration(run.duration_ms)}</span>
 										{/if}

@@ -2,6 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/stores';
 	import { onMount, onDestroy } from 'svelte';
+	import { formatTimestamp } from '$lib/time-utils';
 
 	let { children } = $props();
 
@@ -49,16 +50,7 @@
 		return agent;
 	}
 
-	function timeAgo(date: string): string {
-		const ms = Date.now() - new Date(date).getTime();
-		const sec = Math.floor(ms / 1000);
-		if (sec < 60) return `${sec}s`;
-		const min = Math.floor(sec / 60);
-		if (min < 60) return `${min}m`;
-		const hr = Math.floor(min / 60);
-		if (hr < 24) return `${hr}h`;
-		return `${Math.floor(hr / 24)}d`;
-	}
+
 
 	// Fetch activity for right panel
 	async function fetchActivity() {
@@ -170,7 +162,7 @@
 				<div class="py-2 border-b border-border/50 last:border-0">
 					<div class="flex items-center gap-1.5 mb-0.5">
 						<span class="text-[11px] font-medium {agentColor(event.agent)}">{agentLabel(event.agent)}</span>
-						<span class="text-[10px] text-text-dim ml-auto">{timeAgo(event.created_at)}</span>
+						<span class="text-[10px] text-text-dim ml-auto">{formatTimestamp(event.created_at)}</span>
 					</div>
 					<p class="text-[11px] text-text-muted leading-snug">{event.message}</p>
 				</div>

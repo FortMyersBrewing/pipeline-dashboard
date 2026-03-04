@@ -3,6 +3,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { STAGE_LABELS } from '$lib/types';
+	import { formatTimestamp } from '$lib/time-utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -10,15 +11,7 @@
 	onMount(() => { refreshInterval = setInterval(() => invalidateAll(), 5000); });
 	onDestroy(() => clearInterval(refreshInterval));
 
-	function timeAgo(date: string): string {
-		const ms = Date.now() - new Date(date).getTime();
-		const min = Math.floor(ms / 60000);
-		if (min < 1) return 'just now';
-		if (min < 60) return `${min}m ago`;
-		const hr = Math.floor(min / 60);
-		if (hr < 24) return `${hr}h ago`;
-		return `${Math.floor(hr / 24)}d ago`;
-	}
+
 
 	function durationStr(ms: number | null): string {
 		if (!ms) return '—';
@@ -88,7 +81,7 @@
 						<span class="w-16 text-text-dim">{run.agent || '—'}</span>
 						<span class="w-16 text-right {run.status === 'passed' ? 'text-success' : run.status === 'running' ? 'text-info' : 'text-error'}">{run.status}</span>
 						<span class="w-16 text-right text-text-dim">{durationStr(run.duration_ms)}</span>
-						<span class="w-16 text-right text-text-dim">{timeAgo(run.started_at)}</span>
+						<span class="w-16 text-right text-text-dim">{formatTimestamp(run.started_at)}</span>
 					</button>
 					{#if expandedRun === run.id && run.result}
 						<div class="mx-4 mb-3 p-3 rounded bg-bg border border-border overflow-x-auto max-h-48 overflow-y-auto">

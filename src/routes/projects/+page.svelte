@@ -3,6 +3,7 @@
 	import { invalidateAll, goto } from '$app/navigation';
 	import type { PageData } from './$types';
 	import { STACK_TYPE_COLORS } from '$lib/types';
+	import { formatTimestamp } from '$lib/time-utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -14,15 +15,7 @@
 		return STACK_TYPE_COLORS[stackType] || STACK_TYPE_COLORS.default;
 	}
 
-	function timeAgo(date: string): string {
-		const ms = Date.now() - new Date(date).getTime();
-		const min = Math.floor(ms / 60000);
-		if (min < 1) return 'just now';
-		if (min < 60) return `${min}m ago`;
-		const hr = Math.floor(min / 60);
-		if (hr < 24) return `${hr}h ago`;
-		return `${Math.floor(hr / 24)}d ago`;
-	}
+
 
 	function filterByProject(projectSlug: string) {
 		goto(`/?project=${projectSlug}`);
@@ -70,7 +63,7 @@
 					{/if}
 				</div>
 				<div class="mt-3 text-[10px] text-text-dim">
-					Updated {timeAgo(project.updated_at)}
+					Updated {formatTimestamp(project.updated_at)}
 				</div>
 			</div>
 		{/each}

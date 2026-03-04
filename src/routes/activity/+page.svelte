@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
+	import { formatTimestamp } from '$lib/time-utils';
 
 	let { data }: { data: PageData } = $props();
 
@@ -9,15 +10,7 @@
 	onMount(() => { refreshInterval = setInterval(() => invalidateAll(), 5000); });
 	onDestroy(() => clearInterval(refreshInterval));
 
-	function timeAgo(date: string): string {
-		const ms = Date.now() - new Date(date).getTime();
-		const min = Math.floor(ms / 60000);
-		if (min < 1) return 'just now';
-		if (min < 60) return `${min}m ago`;
-		const hr = Math.floor(min / 60);
-		if (hr < 24) return `${hr}h ago`;
-		return `${Math.floor(hr / 24)}d ago`;
-	}
+
 
 	function typeIcon(type: string): string {
 		const icons: Record<string, string> = {
@@ -82,7 +75,7 @@
 						{/if}
 					</div>
 				</div>
-				<span class="text-[10px] text-text-dim shrink-0 mt-0.5">{timeAgo(event.created_at)}</span>
+				<span class="text-[10px] text-text-dim shrink-0 mt-0.5">{formatTimestamp(event.created_at)}</span>
 			</div>
 		{/each}
 		{#if data.events.length === 0}

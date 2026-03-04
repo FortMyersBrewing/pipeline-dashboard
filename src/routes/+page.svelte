@@ -144,6 +144,24 @@
 		invalidateAll();
 	}
 
+	async function startTask(taskId: string) {
+		await fetch(`/api/tasks/${taskId}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				status: 'in_progress',
+				current_stage: 'builder',
+				attempt: 1
+			}),
+		});
+		
+		invalidateAll();
+	}
+
+	function getRunCount(task: Task): number {
+		return task.runs ? task.runs.length : 0;
+	}
+
 	function getProjectColor(stackType: string): { bg: string; text: string } {
 		return STACK_TYPE_COLORS[stackType] || STACK_TYPE_COLORS.default;
 	}
@@ -287,8 +305,23 @@
 									<div class="flex items-center gap-2">
 										<span class="text-xs" title={task.current_stage || 'queued'}>{agentAvatar(task)}</span>
 												<span class="text-[10px] px-1.5 py-0.5 rounded {getProjectColor(task.project_stack_type || 'default').bg} {getProjectColor(task.project_stack_type || 'default').text}">{task.project_name || task.project_id}</span>
+										<!-- Run count badge for Complete column -->
+										{#if ['done', 'failed', 'paused'].includes(task.status) && getRunCount(task) > 0}
+											<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-hover text-text-dim">{getRunCount(task)} runs</span>
+										{/if}
 									</div>
-									<span class="text-[10px] text-text-dim">{timeAgo(task.updated_at)}</span>
+									<div class="flex items-center gap-2">
+										<!-- Start button for Backlog column -->
+										{#if task.status === 'queued'}
+											<button
+												onclick={(e) => { e.stopPropagation(); startTask(task.id); }}
+												class="px-2 py-1 rounded text-[10px] font-medium bg-accent text-bg hover:bg-accent-hover transition-colors opacity-0 group-hover:opacity-100"
+											>
+												▶ Start
+											</button>
+										{/if}
+										<span class="text-[10px] text-text-dim">{timeAgo(task.updated_at)}</span>
+									</div>
 								</div>
 
 								{#if !['queued', 'done', 'failed', 'paused'].includes(task.status)}

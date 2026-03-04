@@ -41,6 +41,10 @@
 	let eventSource: EventSource | null = $state(null);
 	let logContainer: HTMLElement | null = $state(null);
 
+	// Task detail modal
+	let showTaskModal = $state(false);
+	let selectedTask: Task | null = $state(null);
+
 	function toggleLog(taskId: string) {
 		if (logOpen && logTaskId === taskId) {
 			eventSource?.close();
@@ -166,6 +170,55 @@
 		return STACK_TYPE_COLORS[stackType] || STACK_TYPE_COLORS.default;
 	}
 
+	function openTaskModal(task: Task) {
+		selectedTask = task;
+		showTaskModal = true;
+	}
+
+	function closeTaskModal() {
+		selectedTask = null;
+		showTaskModal = false;
+	}
+
+	// Handle escape key to close modal
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && showTaskModal) {
+			closeTaskModal();
+		}
+	}
+
+	// Format duration from milliseconds to human readable
+	function formatDuration(durationMs: number | null): string {
+		if (!durationMs) return '—';
+		const seconds = Math.floor(durationMs / 1000);
+		const minutes = Math.floor(seconds / 60);
+		const hours = Math.floor(minutes / 60);
+		
+		if (hours > 0) return `${hours}h ${minutes % 60}m`;
+		if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+		return `${seconds}s`;
+	}
+
+	// Get stage icon
+	function getStageIcon(stage: string): string {
+		const icons: Record<string, string> = {
+			scout: '🔍',
+			builder: '🏗',
+			gatekeeper: '🚦',
+			reviewer: '👁',
+			qa: '🧪'
+		};
+		return icons[stage] || '◆';
+	}
+
+	// Get run status color
+	function getRunStatusColor(status: string): string {
+		if (status === 'passed') return 'bg-success/10 text-success';
+		if (status === 'failed') return 'bg-error/10 text-error';
+		if (status === 'running') return 'bg-info/10 text-info animate-pulse';
+		return 'bg-bg-hover text-text-dim';
+	}
+
 	async function createTask() {
 		if (!newTask.title || !newTask.project_id) return;
 		const id = newTask.id || `task-${Date.now().toString(36)}`;
@@ -186,6 +239,8 @@
 		{ title: 'Complete', tasks: complete, color: 'text-success' },
 	]);
 </script>
+
+<svelte:window on:keydown={handleKeydown} />
 
 <div class="flex flex-col h-full">
 	<!-- Stats bar -->
@@ -294,7 +349,12 @@
 							<div class="bg-bg-card border border-border rounded-lg p-3.5 hover:border-border-light hover:bg-bg-hover transition-all cursor-pointer group">
 								<div class="flex items-start gap-2 mb-2">
 									<span class="w-2 h-2 rounded-full mt-1.5 shrink-0 {priorityDot(task.priority)}"></span>
-									<h3 class="text-[13px] font-medium text-text leading-snug">{task.title}</h3>
+									<h3 
+										class="text-[13px] font-medium text-text leading-snug cursor-pointer hover:text-accent transition-colors"
+										onclick={(e) => { e.stopPropagation(); openTaskModal(task); }}
+									>
+										{task.title}
+									</h3>
 								</div>
 
 								{#if task.description}
@@ -420,4 +480,141 @@
 			{/each}
 		</div>
 	</section>
+{/if}
+
+<!-- Task Detail Modal -->
+{#if showTaskModal && selectedTask}
+	<div 
+		class="fixed inset-0 z-50 flex items-center justify-center px-4"
+		onclick={closeTaskModal}
+	>
+		<!-- Backdrop -->
+		<div class="absolute inset-0 bg-black/50"></div>
+		
+		<!-- Modal Content -->
+		<div 
+			class="relative bg-[#1a1a2e] rounded-lg max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-xl border border-border"
+			onclick={(e) => e.stopPropagation()}
+		>
+			<!-- Header -->
+			<div class="flex items-start justify-between p-6 border-b border-border">
+				<div class="flex-1 min-w-0">
+					<div class="flex items-start gap-3 mb-3">
+						<h2 class="text-lg font-semibold text-text leading-tight">{selectedTask.title}</h2>
+						<button 
+							onclick={closeTaskModal}
+							class="p-1 text-text-dim hover:text-text transition-colors"
+						>
+							✕
+						</button>
+					</div>
+					
+					<div class="flex items-center gap-3 flex-wrap">
+						<!-- Status Badge -->
+						<span class="text-xs px-2 py-1 rounded-full {statusBadgeColor(selectedTask.status) || 'bg-bg-hover text-text-dim'}">
+							{selectedTask.status}
+						</span>
+						
+						<!-- Priority -->
+						<div class="flex items-center gap-1">
+							<span class="w-2 h-2 rounded-full {priorityDot(selectedTask.priority)}"></span>
+							<span class="text-xs text-text-muted capitalize">{selectedTask.priority} priority</span>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- Meta Row -->
+			<div class="px-6 py-4 border-b border-border/50 bg-bg-card/30">
+				<div class="flex items-center gap-6 flex-wrap text-xs">
+					<div class="flex items-center gap-2">
+						<span class="text-text-dim">Project:</span>
+						<span class="px-2 py-1 rounded {getProjectColor(selectedTask.project_stack_type || 'default').bg} {getProjectColor(selectedTask.project_stack_type || 'default').text}">
+							{selectedTask.project_name || selectedTask.project_id}
+						</span>
+					</div>
+					
+					<div class="flex items-center gap-2">
+						<span class="text-text-dim">Created:</span>
+						<span class="text-text-muted">{new Date(selectedTask.created_at).toLocaleDateString()}</span>
+					</div>
+					
+					<div class="flex items-center gap-2">
+						<span class="text-text-dim">Updated:</span>
+						<span class="text-text-muted">{timeAgo(selectedTask.updated_at)}</span>
+					</div>
+					
+					{#if selectedTask.assignee}
+						<div class="flex items-center gap-2">
+							<span class="text-text-dim">Assignee:</span>
+							<span class="text-text-muted">{selectedTask.assignee}</span>
+						</div>
+					{/if}
+				</div>
+			</div>
+
+			<!-- Description -->
+			<div class="px-6 py-4 border-b border-border/50">
+				<h3 class="text-sm font-medium text-text mb-2">Description</h3>
+				{#if selectedTask.description}
+					<p class="text-sm text-text-muted leading-relaxed whitespace-pre-wrap">{selectedTask.description}</p>
+				{:else}
+					<p class="text-sm text-text-dim italic">No description provided</p>
+				{/if}
+			</div>
+
+			<!-- Run Timeline -->
+			<div class="px-6 py-4 flex-1 overflow-y-auto">
+				<h3 class="text-sm font-medium text-text mb-4">Pipeline Runs</h3>
+				
+				{#if selectedTask.runs && selectedTask.runs.length > 0}
+					<div class="space-y-4">
+						{#each selectedTask.runs.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime()) as run}
+							<div class="flex gap-4">
+								<!-- Timeline Line -->
+								<div class="flex flex-col items-center">
+									<div class="w-8 h-8 rounded-full bg-bg-card border-2 {run.status === 'passed' ? 'border-success' : run.status === 'failed' ? 'border-error' : 'border-info'} flex items-center justify-center text-sm">
+										{getStageIcon(run.stage)}
+									</div>
+									<div class="w-px bg-border/50 flex-1 min-h-4 mt-1"></div>
+								</div>
+								
+								<!-- Run Details -->
+								<div class="flex-1 pb-4">
+									<div class="flex items-center gap-2 mb-1">
+										<span class="text-sm font-medium text-text">{STAGE_LABELS[run.stage] || run.stage}</span>
+										<span class="text-xs px-2 py-0.5 rounded-full {getRunStatusColor(run.status)}">{run.status}</span>
+										{#if run.agent}
+											<span class="text-xs text-text-dim">by {run.agent}</span>
+										{/if}
+									</div>
+									
+									<div class="flex items-center gap-4 text-xs text-text-muted">
+										<span>Attempt {run.attempt}</span>
+										<span>Started: {new Date(run.started_at).toLocaleString()}</span>
+										{#if run.finished_at}
+											<span>Duration: {formatDuration(run.duration_ms)}</span>
+										{/if}
+									</div>
+									
+									{#if run.result}
+										<div class="mt-2 p-2 bg-bg-card/50 rounded text-xs text-text-muted font-mono max-h-20 overflow-y-auto">
+											{run.result}
+										</div>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<div class="text-center py-8 text-sm text-text-dim">
+						<div class="w-12 h-12 rounded-full bg-bg-card/50 flex items-center justify-center mx-auto mb-3 text-lg">
+							◆
+						</div>
+						<p>No pipeline runs yet</p>
+					</div>
+				{/if}
+			</div>
+		</div>
+	</div>
 {/if}

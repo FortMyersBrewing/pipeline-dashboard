@@ -22,7 +22,7 @@ export const GET: RequestHandler = ({ url }) => {
 		query += ' AND status = ?';
 		params.push(status);
 	}
-	query += " ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, created_at DESC";
+	query += " ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, completed_at DESC NULLS LAST, created_at DESC";
 
 	const tasks = db.prepare(query).all(...params);
 	return json(tasks);

@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { readFileSync, existsSync, statSync, lstatSync } from 'fs';
+import { readFileSync, existsSync, statSync, lstatSync, openSync, readSync, closeSync } from 'fs';
 import { resolve, join } from 'path';
 import { homedir } from 'os';
 import { getDb } from '$lib/db';
@@ -81,9 +81,9 @@ export const GET: RequestHandler = ({ params }) => {
 		if (fileSize > MAX_FILE_SIZE) {
 			// Read only the first 1MB and mark as truncated
 			const buffer = Buffer.alloc(MAX_FILE_SIZE);
-			const fd = require('fs').openSync(requestedPath, 'r');
-			require('fs').readSync(fd, buffer, 0, MAX_FILE_SIZE, 0);
-			require('fs').closeSync(fd);
+			const fd = openSync(requestedPath, 'r');
+			readSync(fd, buffer, 0, MAX_FILE_SIZE, 0);
+			closeSync(fd);
 			content = buffer.toString('utf-8');
 			truncated = true;
 		} else {
@@ -143,9 +143,9 @@ function isBinaryFile(filename: string, fullPath: string): boolean {
 		const sampleSize = Math.min(8192, fileSize);
 		const buffer = Buffer.allocUnsafe(sampleSize);
 		
-		const fd = require('fs').openSync(fullPath, 'r');
-		const bytesRead = require('fs').readSync(fd, buffer, 0, sampleSize, 0);
-		require('fs').closeSync(fd);
+		const fd = openSync(fullPath, 'r');
+		const bytesRead = readSync(fd, buffer, 0, sampleSize, 0);
+		closeSync(fd);
 		
 		// Only check bytes that were actually read
 		for (let i = 0; i < bytesRead; i++) {

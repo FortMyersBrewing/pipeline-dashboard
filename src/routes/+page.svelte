@@ -10,7 +10,7 @@
 
 	// Kanban columns
 	const backlog = $derived(data.tasks.filter((t: Task) => t.status === 'queued'));
-	const inProgress = $derived(data.tasks.filter((t: Task) => ['in_progress', 'scouting', 'building', 'gating'].includes(t.status)));
+	const inProgress = $derived(data.tasks.filter((t: Task) => ['dispatching', 'in_progress', 'scouting', 'building', 'gating'].includes(t.status)));
 	const review = $derived(data.tasks.filter((t: Task) => ['reviewing', 'testing', 'review'].includes(t.status)));
 	const complete = $derived(data.tasks.filter((t: Task) => ['done', 'failed', 'paused'].includes(t.status)));
 
@@ -102,6 +102,7 @@
 		if (s === 'done') return 'bg-success/10 text-success';
 		if (s === 'failed') return 'bg-error/10 text-error';
 		if (s === 'paused') return 'bg-warning/10 text-warning';
+		if (s === 'dispatching') return 'bg-accent/10 text-accent animate-pulse';
 		return '';
 	}
 
@@ -165,8 +166,8 @@
 			method: 'PATCH',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				status: 'in_progress',
-				current_stage: 'builder',
+				status: 'dispatching',
+				current_stage: 'scout',
 				attempt: 1
 			}),
 		});
@@ -381,6 +382,10 @@
 									<div class="flex items-center gap-2">
 										<span class="text-xs" title={task.current_stage || 'queued'}>{agentAvatar(task)}</span>
 												<span class="text-[10px] px-1.5 py-0.5 rounded {getProjectColor(task.project_stack_type || 'default').bg} {getProjectColor(task.project_stack_type || 'default').text}">{task.project_name || task.project_id}</span>
+										<!-- Stage badge for in-progress tasks -->
+										{#if ['dispatching', 'in_progress', 'scouting', 'building', 'gating', 'reviewing', 'testing'].includes(task.status) && task.current_stage}
+											<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-info/10 text-info">{task.current_stage}</span>
+										{/if}
 										<!-- Run count badge for Complete column -->
 										{#if ['done', 'failed', 'paused'].includes(task.status) && getRunCount(task) > 0}
 											<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-hover text-text-dim">{getRunCount(task)} runs</span>
@@ -415,7 +420,7 @@
 									</div>
 								{/if}
 
-								{#if ['done', 'failed', 'paused'].includes(task.status)}
+								{#if ['dispatching', 'done', 'failed', 'paused'].includes(task.status)}
 									<div class="mt-2 ml-4">
 										<span class="text-[10px] px-2 py-0.5 rounded-full {statusBadgeColor(task.status)}">{task.status}</span>
 									</div>

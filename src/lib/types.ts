@@ -6,9 +6,17 @@ export interface Project {
 	repo_url: string | null;
 	stack_type: string;
 	status: string;
+	description?: string;
+	tags?: string[]; // parsed from JSON
+	default_priority?: string;
+	default_branch?: string;
+	github_org?: string;
+	template?: string;
+	env_notes?: string;
 	created_at: string;
 	updated_at: string;
 	task_counts?: Record<string, number>;
+	total_tasks?: number;
 }
 
 export interface Task {
@@ -94,3 +102,47 @@ export const STACK_TYPE_COLORS: Record<string, { bg: string; text: string }> = {
 	java: { bg: 'bg-red-600/20', text: 'text-red-400' },
 	default: { bg: 'bg-bg/60', text: 'text-text-dim' },
 };
+
+// New interfaces for projects enhancement
+export interface ProjectDoc {
+	id: number;
+	project_id: string;
+	title: string;
+	doc_type: 'spec' | 'design' | 'architecture' | 'reference' | 'notes';
+	content?: string;
+	file_path?: string;
+	url?: string;
+	version: number;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ProjectDependency {
+	id: number;
+	project_id: string;
+	depends_on: string;
+	depends_on_name?: string;
+	note?: string;
+	created_at: string;
+}
+
+export interface GitHubRepo {
+	name: string;
+	url: string;
+	description?: string;
+	primaryLanguage?: string;
+}
+
+export interface ProjectCreateRequest {
+	name: string;
+	slug?: string;
+	description?: string;
+	stack_type: string;
+	repo_path?: string;
+	repo_url?: string;
+	github_action: 'none' | 'import' | 'create' | 'link';
+	github_repo?: string;
+	github_visibility?: 'public' | 'private';
+	tags?: string[];
+	default_priority?: 'low' | 'medium' | 'high' | 'urgent';
+}

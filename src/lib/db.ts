@@ -81,7 +81,67 @@ function initDb(db: Database.Database) {
 			current_task TEXT,
 			last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
+
+		-- New tables for projects enhancement
+		CREATE TABLE IF NOT EXISTS project_docs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			title TEXT NOT NULL,
+			doc_type TEXT NOT NULL,
+			content TEXT,
+			file_path TEXT,
+			url TEXT,
+			version INTEGER DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS project_deps (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			depends_on TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			note TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(project_id, depends_on)
+		);
 	`);
+
+	// Add new columns to projects table if they don't exist
+	try {
+		db.exec(`ALTER TABLE projects ADD COLUMN description TEXT`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE projects ADD COLUMN tags TEXT`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE projects ADD COLUMN default_priority TEXT DEFAULT 'medium'`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE projects ADD COLUMN default_branch TEXT DEFAULT 'main'`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE projects ADD COLUMN github_org TEXT`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE projects ADD COLUMN template TEXT`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE projects ADD COLUMN env_notes TEXT`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
 
 	// Seed projects if none exist
 	const count = db.prepare('SELECT COUNT(*) as n FROM projects').get() as { n: number };

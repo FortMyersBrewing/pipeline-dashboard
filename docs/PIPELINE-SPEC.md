@@ -55,13 +55,37 @@ AVA (Coordinator) orchestrates:
 
 ## Trigger Mechanism
 
-**Database polling via AVA's heartbeat** (every 5 minutes):
-- AVA's heartbeat checks `GET /api/tasks/pending` (returns tasks with `status = 'dispatching'`)
-- When pending task found → AVA picks it up, sets `in_progress`, begins orchestration
-- No external dispatcher script needed — the database IS the communication layer
-- SQLite `pipeline.db` is the single source of truth for all task state
+**Webhook-triggered heartbeat** (`/hooks/wake`):
 
-**No `sessions_send`, no file-based dispatch, no launchd service.** Just the database and the heartbeat.
+### Task dispatch (Start button → AVA picks up)
+1. Rob hits Start on dashboard → status set to `dispatching` in database
+2. Dashboard's Start button also POSTs to `/hooks/wake`: `{"text":"Task {id} dispatching","mode":"now"}`
+3. This triggers an **immediate** heartbeat in AVA's session
+4. AVA's heartbeat checks `GET /api/tasks/pending` → finds dispatching task → picks it up
+
+### Stage completion (agent finishes → AVA spawns next stage)
+1. Sub-agent finishes → auto-announce fires → `message:sent` hook triggers
+2. Hook POSTs to `/hooks/wake`: `{"text":"Agent completed: {label}","mode":"now"}`
+3. This triggers an **immediate** heartbeat in AVA's session
+4. AVA's heartbeat checks `subagents list` for recently completed agents → processes result → spawns next stage
+
+### Why this works
+- **Database is the source of truth** — webhooks are just triggers, not data carriers
+- **Zero polling delay** — `/hooks/wake` with `mode: "now"` triggers instant heartbeat
+- **5-minute heartbeat is the fallback** — if webhook fails, regular heartbeat catches it
+- **No external dispatcher script** — dashboard and hooks handle triggering
+
+### Configuration needed
+```json
+{
+  "hooks": {
+    "enabled": true,
+    "token": "<hooks-secret>",
+    "path": "/hooks"
+  }
+}
+```
+Plus a `message:sent` hook that detects sub-agent announces and POSTs `/hooks/wake`.
 
 ## Stage Details
 

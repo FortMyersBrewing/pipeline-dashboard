@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { readFileSync, existsSync, statSync } from 'fs';
+import { readFileSync, existsSync, statSync, lstatSync } from 'fs';
 import { resolve, join } from 'path';
 import { homedir } from 'os';
 import { getDb } from '$lib/db';
@@ -22,8 +22,14 @@ export const GET: RequestHandler = ({ params }) => {
 		return json({ error: 'Project not found' }, { status: 404 });
 	}
 
+	// Type-safe access to repo_path
+	const repoPath = (project as Record<string, unknown>).repo_path;
+	if (typeof repoPath !== 'string' || !repoPath) {
+		return json({ error: 'Project has no configured repository path' }, { status: 500 });
+	}
+
 	// Resolve project base path
-	let basePath = (project as { repo_path: string }).repo_path;
+	let basePath = repoPath;
 	if (basePath.startsWith('~/')) {
 		basePath = resolve(homedir(), basePath.slice(2));
 	} else {
@@ -45,11 +51,17 @@ export const GET: RequestHandler = ({ params }) => {
 	}
 
 	try {
-		const stat = statSync(requestedPath);
+		// Use lstatSync to detect symlinks (prevents symlink bypass of path traversal protection)
+		const lstat = lstatSync(requestedPath);
+		if (lstat.isSymbolicLink()) {
+			return json({ error: 'Access denied: symlinks are not allowed' }, { status: 403 });
+		}
 		
-		if (stat.isDirectory()) {
+		if (lstat.isDirectory()) {
 			return json({ error: 'Path is a directory, not a file' }, { status: 400 });
 		}
+
+		const stat = lstat; // lstat gives us size too
 
 		// BINARY detection: Check extension AND first 8KB for null bytes
 		if (isBinaryFile(filePath, requestedPath)) {

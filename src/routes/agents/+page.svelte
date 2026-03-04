@@ -49,7 +49,7 @@
 		{#each data.agents as agent}
 			{@const colorStyles = getColorStyles(agent.color)}
 			<div 
-				class="bg-bg-card border rounded-lg p-5 transition-all hover:border-opacity-70 {agent.status === 'working' ? 'ring-1 ring-info/20' : ''}"
+				class="bg-bg-card border rounded-lg p-5 transition-all hover:border-opacity-70 {agent.status === 'working' ? 'ring-2 ring-info/30 shadow-lg shadow-info/10' : ''}"
 				style="border-color: {colorStyles.borderColor};"
 			>
 				<div class="flex items-center justify-between mb-3">
@@ -73,10 +73,29 @@
 					<span class="text-text font-mono">{agent.modelAbbrev}</span>
 				</div>
 
-				<div class="bg-bg rounded-md p-3 border border-border">
-					<p class="text-[10px] text-text-dim">Last Activity</p>
-					<p class="text-xs text-text-muted mt-1">{agent.lastActivity}</p>
-				</div>
+				{#if agent.status === 'working' && agent.currentTask}
+					<div class="bg-info/5 border border-info/20 rounded-md p-3 mb-3">
+						<p class="text-[10px] text-info font-semibold">CURRENT TASK</p>
+						<p class="text-xs text-text mt-1">{agent.currentTask}</p>
+						{#if agent.runtime}
+							<div class="flex items-center justify-between mt-2 text-[10px]">
+								<span class="text-text-dim">Runtime:</span>
+								<span class="text-info font-mono">{agent.runtime}</span>
+							</div>
+						{/if}
+						{#if agent.totalTokens}
+							<div class="flex items-center justify-between mt-1 text-[10px]">
+								<span class="text-text-dim">Tokens:</span>
+								<span class="text-info font-mono">{agent.totalTokens.toLocaleString()}</span>
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<div class="bg-bg rounded-md p-3 border border-border">
+						<p class="text-[10px] text-text-dim">Last Activity</p>
+						<p class="text-xs text-text-muted mt-1">{agent.lastActivity}</p>
+					</div>
+				{/if}
 			</div>
 		{/each}
 	</div>

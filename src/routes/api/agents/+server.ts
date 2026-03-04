@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDb } from '$lib/db';
+import { getAgentStatuses } from '$lib/openclaw-api';
 
 export interface Agent {
 	id: string;
@@ -12,6 +13,9 @@ export interface Agent {
 	color: string;
 	status: 'idle' | 'working' | 'offline';
 	lastActivity: string;
+	currentTask?: string;
+	runtime?: string;
+	totalTokens?: number;
 }
 
 // Real OpenClaw agents config
@@ -96,24 +100,42 @@ const agents: Agent[] = [
 ];
 
 export const GET: RequestHandler = async () => {
-	// Read real-time status from agent_status table
+	// Get live agent statuses from OpenClaw gateway
 	try {
-		const statuses = getDb().prepare('SELECT agent_id, status, current_task, last_updated FROM agent_status').all() as Array<{agent_id: string, status: string, current_task: string | null, last_updated: string | null}>;
-		const statusMap = new Map(statuses.map(s => [s.agent_id, s]));
+		const liveStatuses = await getAgentStatuses();
+		const statusMap = new Map(liveStatuses.map(s => [s.agentId, s]));
 		
-		const enriched = agents.map(a => {
-			const live = statusMap.get(a.id);
-			return {
-				...a,
-				status: live?.status || a.status,
-				lastActivity: live?.current_task || a.lastActivity,
-				lastUpdated: live?.last_updated || null
-			};
+		const enriched = agents.map(agent => {
+			const live = statusMap.get(agent.id);
+			
+			if (live) {
+				// Agent has live data from OpenClaw
+				return {
+					...agent,
+					status: live.status,
+					currentTask: live.task,
+					runtime: live.runtime,
+					totalTokens: live.totalTokens,
+					lastActivity: live.status === 'working' 
+						? `Working: ${live.task}` 
+						: live.lastCompletedTask 
+							? `Last: ${live.lastCompletedTask} (${live.lastCompletedRuntime})`
+							: 'No recent activity'
+				};
+			} else {
+				// Agent not found in OpenClaw - use static data
+				return {
+					...agent,
+					status: 'idle' as const,
+					lastActivity: 'No recent activity'
+				};
+			}
 		});
 		
 		return json({ agents: enriched });
-	} catch (e) {
-		console.error('Agent status DB error:', e);
+	} catch (error) {
+		console.error('Failed to fetch OpenClaw agent statuses:', error);
+		// Fall back to static data if OpenClaw is unavailable
 		return json({ agents });
 	}
 };

@@ -11,7 +11,7 @@
 	// Kanban columns
 	const backlog = $derived(data.tasks.filter((t: Task) => t.status === 'queued'));
 	const inProgress = $derived(data.tasks.filter((t: Task) => ['scouting', 'building', 'gating'].includes(t.status)));
-	const review = $derived(data.tasks.filter((t: Task) => ['reviewing', 'testing'].includes(t.status)));
+	const review = $derived(data.tasks.filter((t: Task) => ['reviewing', 'testing', 'review'].includes(t.status)));
 	const complete = $derived(data.tasks.filter((t: Task) => ['done', 'failed', 'paused'].includes(t.status)));
 
 	let filterProject = $state('all');
@@ -25,6 +25,7 @@
 	});
 	let showNewTask = $state(false);
 	let newTask = $state({ id: '', title: '', description: '', project_id: '', priority: 'medium' });
+	let reviewComments = $state<Record<string, string>>({}); // taskId -> comment
 
 	// Auto-refresh
 	let refreshInterval: ReturnType<typeof setInterval>;
@@ -92,6 +93,55 @@
 		if (!task.current_stage) return '◆';
 		const map: Record<string, string> = { scout: '🔍', builder: '🏗', gatekeeper: '🚦', reviewer: '👁', qa: '🧪' };
 		return map[task.current_stage] || '◆';
+	}
+
+	function getFailureSummary(task: Task): { stage: string; attempts: number } {
+		if (!task.runs || task.runs.length === 0) return { stage: 'unknown', attempts: task.attempt };
+		
+		const failedRuns = task.runs.filter((r: Run) => r.status === 'failed');
+		const lastFailedRun = failedRuns[failedRuns.length - 1];
+		const stage = lastFailedRun?.stage || task.current_stage || 'unknown';
+		
+		return { stage, attempts: task.attempt };
+	}
+
+	async function retryTask(taskId: string, comment: string) {
+		// Store the comment as an event
+		if (comment.trim()) {
+			await fetch(`/api/tasks/${taskId}/events`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					type: 'review',
+					message: comment.trim(),
+					agent: 'human'
+				}),
+			});
+		}
+		
+		// Reset task to queued with attempt 0
+		await fetch(`/api/tasks/${taskId}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				status: 'queued',
+				attempt: 0
+			}),
+		});
+		
+		invalidateAll();
+	}
+
+	async function dismissTask(taskId: string) {
+		await fetch(`/api/tasks/${taskId}`, {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				status: 'failed'
+			}),
+		});
+		
+		invalidateAll();
 	}
 
 	function getProjectColor(stackType: string): { bg: string; text: string } {
@@ -262,17 +312,48 @@
 									</div>
 								{/if}
 
-								<div class="mt-2 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
-									<button
-										onclick={(e) => { e.stopPropagation(); toggleLog(task.id); }}
-										class="text-[10px] px-2 py-0.5 rounded border transition-colors
-											{logOpen && logTaskId === task.id
-												? 'border-accent text-accent bg-accent/10'
-												: 'border-border text-text-dim hover:text-text hover:border-border-light'}"
-									>
-										{logOpen && logTaskId === task.id ? '■ Stop' : '▶ Log'}
-									</button>
-								</div>
+								<!-- Review UI for tasks needing human intervention -->
+								{#if task.status === 'review'}
+									{@const failure = getFailureSummary(task)}
+									<div class="mt-3 ml-4 space-y-2 border-t border-border/50 pt-2">
+										<div class="text-[11px] text-error">
+											Failed {failure.attempts}x at {failure.stage}
+										</div>
+										<textarea
+											value={reviewComments[task.id] || ''}
+											oninput={(e) => reviewComments[task.id] = (e.target as HTMLTextAreaElement).value}
+											placeholder="Add feedback for next attempt..."
+											rows="2"
+											class="w-full bg-[#1a1a2e] border border-border/50 rounded-md px-2 py-1.5 text-xs text-text placeholder:text-text-dim focus:outline-none focus:border-accent resize-none"
+										></textarea>
+										<div class="flex items-center gap-2">
+											<button
+												onclick={(e) => { e.stopPropagation(); retryTask(task.id, reviewComments[task.id] || ''); }}
+												class="px-3 py-1 rounded text-[10px] font-medium bg-accent text-bg hover:bg-accent-hover transition-colors"
+											>
+												Retry
+											</button>
+											<button
+												onclick={(e) => { e.stopPropagation(); dismissTask(task.id); }}
+												class="px-3 py-1 rounded text-[10px] font-medium bg-error/20 text-error hover:bg-error/30 transition-colors"
+											>
+												Dismiss
+											</button>
+										</div>
+									</div>
+								{:else}
+									<div class="mt-2 ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
+										<button
+											onclick={(e) => { e.stopPropagation(); toggleLog(task.id); }}
+											class="text-[10px] px-2 py-0.5 rounded border transition-colors
+												{logOpen && logTaskId === task.id
+													? 'border-accent text-accent bg-accent/10'
+													: 'border-border text-text-dim hover:text-text hover:border-border-light'}"
+										>
+											{logOpen && logTaskId === task.id ? '■ Stop' : '▶ Log'}
+										</button>
+									</div>
+								{/if}
 							</div>
 						{/each}
 						{#if filteredTasks.length === 0}

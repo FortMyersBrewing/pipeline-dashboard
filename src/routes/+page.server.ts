@@ -8,7 +8,13 @@ export const load: PageServerLoad = () => {
 		SELECT tasks.*, projects.name as project_name, projects.slug as project_slug, projects.stack_type as project_stack_type 
 		FROM tasks 
 		LEFT JOIN projects ON tasks.project_id = projects.id
-		ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END, updated_at DESC
+		ORDER BY 
+			CASE 
+				WHEN status IN ('done', 'failed', 'paused') THEN 
+					COALESCE(completed_at, updated_at)
+				ELSE 
+					(CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END) || '-' || updated_at
+			END DESC
 	`).all() as Task[];
 
 	const enriched = tasks.map((t) => {

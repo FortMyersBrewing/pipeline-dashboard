@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { invalidateAll } from '$app/navigation';
+	import { invalidateAll, goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import type { PageData } from './$types';
 	import { STAGES, STAGE_LABELS, STACK_TYPE_COLORS } from '$lib/types';
@@ -41,9 +41,21 @@
 	let eventSource: EventSource | null = $state(null);
 	let logContainer: HTMLElement | null = $state(null);
 
-	// Task detail modal
-	let showTaskModal = $state(false);
-	let selectedTask: Task | null = $state(null);
+	// Task detail modal - using URL params to persist across refreshes
+	let selectedTaskId = $state<string | null>(null);
+	
+	// Sync selectedTaskId with URL params
+	$effect(() => {
+		const taskParam = $page.url.searchParams.get('task');
+		selectedTaskId = taskParam;
+	});
+	
+	// Derived: get the actual task object from current data
+	const selectedTask = $derived(
+		selectedTaskId ? data.tasks.find((t: Task) => t.id === selectedTaskId) : null
+	);
+	
+	const showTaskModal = $derived(!!selectedTask);
 
 	function toggleLog(taskId: string) {
 		if (logOpen && logTaskId === taskId) {
@@ -171,13 +183,17 @@
 	}
 
 	function openTaskModal(task: Task) {
-		selectedTask = task;
-		showTaskModal = true;
+		// Use URL params to persist the selected task across refreshes
+		const url = new URL($page.url);
+		url.searchParams.set('task', task.id);
+		goto(url.toString(), { replaceState: true });
 	}
 
 	function closeTaskModal() {
-		selectedTask = null;
-		showTaskModal = false;
+		// Remove task param from URL
+		const url = new URL($page.url);
+		url.searchParams.delete('task');
+		goto(url.toString(), { replaceState: true });
 	}
 
 	// Handle escape key to close modal

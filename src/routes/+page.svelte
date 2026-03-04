@@ -162,14 +162,8 @@
 	}
 
 	async function startTask(taskId: string) {
-		await fetch(`/api/tasks/${taskId}`, {
-			method: 'PATCH',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				status: 'dispatching',
-				current_stage: 'scout',
-				attempt: 1
-			}),
+		await fetch(`/api/tasks/${taskId}/start`, {
+			method: 'POST',
 		});
 		
 		invalidateAll();

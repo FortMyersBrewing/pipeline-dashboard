@@ -166,8 +166,9 @@
 			
 			if (!res.ok) {
 				if (data.isBinary) {
-					error = `Binary file detected (${formatFileSize(data.size)})`;
+					error = `Cannot display binary file: ${data.filename} (${formatFileSize(data.size)})`;
 					fileContent = '';
+					fileType = 'text';
 				} else {
 					error = data.error || 'Failed to load file';
 					fileContent = '';
@@ -177,9 +178,15 @@
 			
 			fileContent = data.content;
 			fileType = data.type;
-			error = '';
+			
+			// Show truncation warning if applicable
+			if (data.truncated) {
+				error = `File truncated: Only showing first ${formatFileSize(1024 * 1024)} of ${formatFileSize(data.size)}`;
+			} else {
+				error = '';
+			}
 		} catch (e) {
-			error = 'Failed to load file content';
+			error = `Network error: ${e instanceof Error ? e.message : 'Unknown error'}`;
 			fileContent = '';
 		} finally {
 			loading = false;

@@ -62,14 +62,19 @@ export const GET: RequestHandler = ({ params }) => {
 		}
 
 		const stat = lstat; // lstat gives us size too
+		const fileSize = stat.size;
 
 		// BINARY detection: Check extension AND first 8KB for null bytes
 		if (isBinaryFile(filePath, requestedPath)) {
-			return json({ error: 'Binary file detected' }, { status: 400 });
+			return json({ 
+				isBinary: true, 
+				size: fileSize, 
+				filename: filePath.split('/').pop() || 'unknown',
+				error: 'Binary file detected' 
+			}, { status: 400 });
 		}
 
 		// FILE SIZE LIMIT: 1MB max. Return truncated content with a warning header if exceeded
-		const fileSize = stat.size;
 		let content: string;
 		let truncated = false;
 
@@ -85,12 +90,14 @@ export const GET: RequestHandler = ({ params }) => {
 			content = readFileSync(requestedPath, 'utf-8');
 		}
 
-		// Return file content as JSON: { content: string, path: string, size: number, truncated: boolean }
+		// Return file content as JSON with enhanced metadata
 		return json({
 			content,
 			path: filePath,
 			size: fileSize,
-			truncated
+			truncated,
+			type: getFileType(filePath),
+			filename: filePath.split('/').pop() || 'unknown'
 		});
 
 	} catch (error) {
@@ -98,6 +105,14 @@ export const GET: RequestHandler = ({ params }) => {
 		return json({ error: 'Failed to read file' }, { status: 500 });
 	}
 };
+
+function getFileType(filename: string): 'markdown' | 'text' {
+	const ext = filename.toLowerCase().split('.').pop();
+	if (ext && ['.md', '.markdown'].includes(`.${ext}`)) {
+		return 'markdown';
+	}
+	return 'text';
+}
 
 function isBinaryFile(filename: string, fullPath: string): boolean {
 	// Check extension first
@@ -116,23 +131,33 @@ function isBinaryFile(filename: string, fullPath: string): boolean {
 		return true;
 	}
 
-	// Check first 8KB for null bytes
+	// Improved null byte check
 	try {
-		const buffer = Buffer.alloc(8192); // 8KB
+		const stats = statSync(fullPath);
+		const fileSize = stats.size;
+		
+		// Don't check empty files
+		if (fileSize === 0) return false;
+		
+		// Read up to 8KB or file size, whichever is smaller
+		const sampleSize = Math.min(8192, fileSize);
+		const buffer = Buffer.allocUnsafe(sampleSize);
+		
 		const fd = require('fs').openSync(fullPath, 'r');
-		const bytesRead = require('fs').readSync(fd, buffer, 0, 8192, 0);
+		const bytesRead = require('fs').readSync(fd, buffer, 0, sampleSize, 0);
 		require('fs').closeSync(fd);
 		
-		// Look for null bytes in the read content
+		// Only check bytes that were actually read
 		for (let i = 0; i < bytesRead; i++) {
-			if (buffer[i] === 0) {
-				return true;
-			}
+			if (buffer[i] === 0) return true;
 		}
 		
 		return false;
 	} catch (error) {
-		// If we can't read the file to check, assume it might be binary
-		return true;
+		// Log error for debugging but don't assume binary
+		console.warn(`Could not read file for binary detection: ${fullPath}`, error);
+		// Return false to allow frontend to attempt to display the file
+		// and let it handle the read error appropriately
+		return false;
 	}
 }

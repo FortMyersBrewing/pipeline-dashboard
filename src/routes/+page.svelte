@@ -10,7 +10,7 @@
 
 	// Kanban columns
 	const backlog = $derived(data.tasks.filter((t: Task) => t.status === 'queued'));
-	const inProgress = $derived(data.tasks.filter((t: Task) => ['scouting', 'building', 'gating'].includes(t.status)));
+	const inProgress = $derived(data.tasks.filter((t: Task) => ['in_progress', 'scouting', 'building', 'gating'].includes(t.status)));
 	const review = $derived(data.tasks.filter((t: Task) => ['reviewing', 'testing', 'review'].includes(t.status)));
 	const complete = $derived(data.tasks.filter((t: Task) => ['done', 'failed', 'paused'].includes(t.status)));
 

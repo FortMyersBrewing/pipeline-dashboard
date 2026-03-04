@@ -4,3 +4,11 @@ node_modules
 build
 pipeline.db-wal
 pipeline.db-shm
+
+# Editor temporary files
+*.swp
+*.swo
+*.tmp
+.*.swp
+.DS_Store
+Thumbs.db

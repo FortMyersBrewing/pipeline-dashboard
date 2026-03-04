@@ -10,10 +10,10 @@ export const load: PageServerLoad = () => {
 		LEFT JOIN projects ON tasks.project_id = projects.id
 		ORDER BY 
 			CASE 
-				WHEN status IN ('done', 'failed', 'paused') THEN 
-					COALESCE(completed_at, updated_at)
+				WHEN tasks.status IN ('done', 'failed', 'paused') THEN 
+					COALESCE(tasks.completed_at, tasks.updated_at)
 				ELSE 
-					(CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END) || '-' || updated_at
+					(CASE tasks.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END) || '-' || tasks.updated_at
 			END DESC
 	`).all() as Task[];
 

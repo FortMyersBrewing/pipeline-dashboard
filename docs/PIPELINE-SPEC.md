@@ -55,14 +55,13 @@ AVA (Coordinator) orchestrates:
 
 ## Trigger Mechanism
 
-**Dispatcher** (`scripts/task-dispatcher.sh`):
-- Runs every 30s via launchd (`com.fmbrew.task-dispatcher.plist`)
-- Polls `GET /api/tasks/pending` (zero LLM cost)
-- When pending task found → sends `sessions_send` to AVA's session (`agent:main:main`)
-- Message format: `[DISPATCH] task_id | title | project_path | description`
-- Marks task as `assignee: "pipeline"` to prevent double-dispatch
+**Database polling via AVA's heartbeat** (every 5 minutes):
+- AVA's heartbeat checks `GET /api/tasks/pending` (returns tasks with `status = 'dispatching'`)
+- When pending task found → AVA picks it up, sets `in_progress`, begins orchestration
+- No external dispatcher script needed — the database IS the communication layer
+- SQLite `pipeline.db` is the single source of truth for all task state
 
-**AVA receives the message** and begins orchestration. AVA does NOT do the work — only spawns agents and reads their results.
+**No `sessions_send`, no file-based dispatch, no launchd service.** Just the database and the heartbeat.
 
 ## Stage Details
 
@@ -236,10 +235,10 @@ This keeps dashboard logic in one place (the skill file) and makes it easy to up
 - Add `dispatching` to the pipeline column display (In Progress column)
 - Add `dispatching` as a visual state (different color/icon from `in_progress`)
 
-### Dispatcher changes needed:
-- Poll for `dispatching` tasks instead of `in_progress`
-- Use `sessions_send` to notify AVA instead of spawning agents directly
-- Message format includes task ID, title, project path, description
+### Dispatcher: REMOVED
+- No external dispatcher needed
+- AVA's heartbeat polls the database directly
+- Dispatcher launchd service (`com.fmbrew.task-dispatcher`) unloaded
 
 ### AVA coordinator logic needed:
 - Handle `[DISPATCH]` messages from dispatcher
@@ -255,7 +254,7 @@ This keeps dashboard logic in one place (the skill file) and makes it easy to up
 
 1. `src/routes/+page.svelte` — Start button sets `dispatching`, column filter includes it
 2. `src/routes/api/tasks/pending/+server.ts` — filter on `dispatching` status
-3. `scripts/task-dispatcher.sh` — use `sessions_send` to notify AVA
+3. ~~`scripts/task-dispatcher.sh`~~ — REMOVED, replaced by heartbeat polling
 4. AVA's orchestration logic — handle dispatch messages, run pipeline stages
 5. Gatekeeper wrapper — make it work as a spawned agent (reads project, runs checks, reports)
 6. Reviewer wrapper — spawned agent that runs `codex review --base main`

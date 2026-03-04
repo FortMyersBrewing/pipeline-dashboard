@@ -4,6 +4,7 @@ interface SubagentEntry {
 	status: 'running' | 'done';
 	task: string;
 	runtime: string;
+	runtimeMs?: number;
 	model: string;
 	totalTokens?: number;
 	startedAt?: number;
@@ -23,10 +24,20 @@ export interface AgentStatus {
 	agentId: string;
 	status: 'working' | 'idle';
 	task?: string;
+	label?: string;
 	runtime?: string;
+	runtimeMs?: number;
 	totalTokens?: number;
 	lastCompletedTask?: string;
+	lastCompletedLabel?: string;
 	lastCompletedRuntime?: string;
+}
+
+export interface CompletedAgent {
+	label: string;
+	agentId: string;
+	runtimeMs: number;
+	totalTokens: number;
 }
 
 // TODO: Move to environment variable OPENCLAW_GATEWAY_TOKEN
@@ -45,7 +56,7 @@ function extractAgentId(sessionKey: string): string | null {
 /**
  * Call the OpenClaw gateway to get current subagent statuses
  */
-export async function getAgentStatuses(): Promise<AgentStatus[]> {
+export async function getAgentStatuses(): Promise<{ statuses: AgentStatus[], activeLabels: string[], recentlyCompleted: CompletedAgent[] }> {
 	try {
 		const response = await fetch(`${GATEWAY_URL}/tools/invoke`, {
 			method: 'POST',
@@ -65,37 +76,55 @@ export async function getAgentStatuses(): Promise<AgentStatus[]> {
 
 		if (!response.ok) {
 			console.warn('OpenClaw gateway request failed:', response.status, response.statusText);
-			return [];
+			return { statuses: [], activeLabels: [], recentlyCompleted: [] };
 		}
 
 		const data: SubagentsResponse = await response.json();
 		const { active, recent } = data.result.details;
+
+		// Track active labels for task matching
+		const activeLabels = new Set<string>();
 
 		// Process active agents
 		const activeMap = new Map<string, AgentStatus>();
 		for (const entry of active) {
 			const agentId = extractAgentId(entry.sessionKey);
 			if (agentId) {
+				activeLabels.add(entry.label);
 				activeMap.set(agentId, {
 					agentId,
 					status: 'working',
 					task: entry.task,
+					label: entry.label,
 					runtime: entry.runtime,
+					runtimeMs: entry.runtimeMs,
 					totalTokens: entry.totalTokens
 				});
 			}
 		}
 
-		// Process recent completed agents (for idle agents)
-		const recentMap = new Map<string, Pick<AgentStatus, 'lastCompletedTask' | 'lastCompletedRuntime'>>();
+		// Process recent completed agents (for idle agents and task completion)
+		const recentMap = new Map<string, Pick<AgentStatus, 'lastCompletedTask' | 'lastCompletedRuntime' | 'lastCompletedLabel'>>();
+		const recentlyCompleted: CompletedAgent[] = [];
 		for (const entry of recent) {
 			const agentId = extractAgentId(entry.sessionKey);
-			if (agentId && !activeMap.has(agentId)) {
-				// Only track recent if not currently active
-				recentMap.set(agentId, {
-					lastCompletedTask: entry.task,
-					lastCompletedRuntime: entry.runtime
-				});
+			if (agentId) {
+				if (!activeMap.has(agentId) && !recentMap.has(agentId)) {
+					recentMap.set(agentId, {
+						lastCompletedTask: entry.task,
+						lastCompletedLabel: entry.label,
+						lastCompletedRuntime: entry.runtime
+					});
+				}
+				// Track ALL recently completed for task auto-completion
+				if (entry.status === 'done' && !activeLabels.has(entry.label)) {
+					recentlyCompleted.push({
+						label: entry.label,
+						agentId,
+						runtimeMs: entry.runtimeMs || 0,
+						totalTokens: entry.totalTokens || 0
+					});
+				}
 			}
 		}
 
@@ -116,10 +145,10 @@ export async function getAgentStatuses(): Promise<AgentStatus[]> {
 			});
 		}
 
-		return statuses;
+		return { statuses, activeLabels: [...activeLabels], recentlyCompleted };
 
 	} catch (error) {
 		console.warn('Failed to fetch OpenClaw agent statuses:', error);
-		return [];
+		return { statuses: [], activeLabels: [], recentlyCompleted: [] };
 	}
 }

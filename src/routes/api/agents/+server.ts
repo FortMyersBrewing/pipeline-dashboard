@@ -102,8 +102,31 @@ const agents: Agent[] = [
 export const GET: RequestHandler = async () => {
 	// Get live agent statuses from OpenClaw gateway
 	try {
-		const liveStatuses = await getAgentStatuses();
+		const { statuses: liveStatuses, recentlyCompleted } = await getAgentStatuses();
 		const statusMap = new Map(liveStatuses.map(s => [s.agentId, s]));
+
+		// Auto-complete tasks whose agents have finished
+		const db = getDb();
+		const inProgressTasks = db.prepare(
+			"SELECT id, assignee FROM tasks WHERE status = 'in_progress'"
+		).all() as Array<{id: string, assignee: string | null}>;
+
+		for (const task of inProgressTasks) {
+			// Check if a recently completed agent matches this task's label pattern
+			const matchingCompleted = recentlyCompleted.find(c => 
+				c.label === `${task.id}-builder` || c.label === task.id
+			);
+			if (matchingCompleted) {
+				const now = new Date().toISOString();
+				db.prepare(
+					"UPDATE tasks SET status = 'done', current_stage = 'complete', completed_at = ? WHERE id = ?"
+				).run(now, task.id);
+				// Update any running run records
+				db.prepare(
+					"UPDATE runs SET status = 'passed', finished_at = ?, duration_ms = ? WHERE task_id = ? AND status = 'running'"
+				).run(now, matchingCompleted.runtimeMs, task.id);
+			}
+		}
 		
 		const enriched = agents.map(agent => {
 			const live = statusMap.get(agent.id);

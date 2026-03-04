@@ -2,3 +2,5 @@ pipeline.db
 node_modules
 .svelte-kit
 build
+pipeline.db-wal
+pipeline.db-shm

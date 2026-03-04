@@ -6,6 +6,7 @@
 	import { STAGES, STAGE_LABELS, STACK_TYPE_COLORS } from '$lib/types';
 	import type { Task, Run } from '$lib/types';
 	import { formatTimestamp } from '$lib/time-utils';
+	import { formatDuration } from '$lib/utils/duration.js';
 
 	let { data }: { data: PageData } = $props();
 
@@ -191,17 +192,7 @@
 		}
 	}
 
-	// Format duration from milliseconds to human readable
-	function formatDuration(durationMs: number | null): string {
-		if (!durationMs) return '—';
-		const seconds = Math.floor(durationMs / 1000);
-		const minutes = Math.floor(seconds / 60);
-		const hours = Math.floor(minutes / 60);
-		
-		if (hours > 0) return `${hours}h ${minutes % 60}m`;
-		if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-		return `${seconds}s`;
-	}
+
 
 	// Get stage icon
 	function getStageIcon(stage: string): string {
@@ -600,9 +591,7 @@
 									<div class="flex items-center gap-4 text-xs text-text-muted">
 										<span>Attempt {run.attempt}</span>
 										<span>Started: {formatTimestamp(run.started_at)}</span>
-										{#if run.finished_at}
-											<span>Duration: {formatDuration(run.duration_ms)}</span>
-										{/if}
+										<span>Duration: {formatDuration(run.duration_ms, run.status === 'running')}</span>
 									</div>
 									
 									{#if run.result}

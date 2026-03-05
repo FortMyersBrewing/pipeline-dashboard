@@ -10,17 +10,26 @@
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import KanbanBoard from '$lib/components/KanbanBoard.svelte';
 	import PipelineLaunchWizard from '$lib/components/pipeline/PipelineLaunchWizard.svelte';
+	// Phase 4 imports
+	import CIStatusBadge from '$lib/components/projects/CIStatusBadge.svelte';
+	import HealthIndicator from '$lib/components/projects/HealthIndicator.svelte';
+	import DependenciesSection from '$lib/components/projects/DependenciesSection.svelte';
+	import GitHistoryTab from '$lib/components/projects/GitHistoryTab.svelte';
+	import IssueImportModal from '$lib/components/projects/IssueImportModal.svelte';
 
 	let { data }: { data: PageData } = $props();
 
 	let refreshInterval: ReturnType<typeof setInterval>;
 	let isEditing = $state(false);
-	let activeTab = $state<'overview' | 'docs' | 'kanban' | 'activity'>('overview');
+	let activeTab = $state<'overview' | 'docs' | 'kanban' | 'activity' | 'git-history'>('overview');
 	let showDocEditor = $state(false);
 	let editingDoc = $state<ProjectDoc | null>(null);
 	let showNewDocForm = $state(false);
 	let isEditingEnvNotes = $state(false);
 	let showLaunchWizard = $state(false);
+	// Phase 4 state
+	let showIssueImport = $state(false);
+	let allProjects = $state<any[]>([]);
 
 	let editForm = $state({
 		name: '',
@@ -43,9 +52,23 @@
 	});
 
 	onMount(() => { 
-		refreshInterval = setInterval(() => invalidateAll(), 10000); 
+		refreshInterval = setInterval(() => invalidateAll(), 10000);
+		// Fetch all projects for dependencies
+		fetchAllProjects();
 	});
 	onDestroy(() => clearInterval(refreshInterval));
+
+	// Fetch all projects for dependency management
+	async function fetchAllProjects() {
+		try {
+			const response = await fetch('/api/projects');
+			if (response.ok) {
+				allProjects = await response.json();
+			}
+		} catch (err) {
+			console.error('Failed to fetch projects:', err);
+		}
+	}
 
 	function getStackColor(stackType: string): { bg: string; text: string } {
 		return STACK_TYPE_COLORS[stackType] || STACK_TYPE_COLORS.default;
@@ -302,6 +325,13 @@
 		}
 	}
 
+	// Phase 4 functions
+	function handleIssueImported(event: CustomEvent) {
+		const { count, tasks } = event.detail;
+		alert(`Successfully imported ${count} issue${count === 1 ? '' : 's'} as pipeline tasks`);
+		invalidateAll();
+	}
+
 	const stackColors = $derived(getStackColor(data.project.stack_type));
 	const statusColors = $derived(getStatusColor(data.project.status));
 	const taskGroups = $derived(groupTasksByStatus(data.tasks));
@@ -318,13 +348,19 @@
 			<button onclick={() => goto('/projects')} class="text-text-muted hover:text-text transition-colors">
 				← Projects
 			</button>
-			<h1 class="text-lg font-semibold text-text">{data.project.name}</h1>
+			<div class="flex items-center gap-2">
+				<HealthIndicator projectId={data.project.id} size="md" />
+				<h1 class="text-lg font-semibold text-text">{data.project.name}</h1>
+			</div>
 			<span class="text-[10px] px-2 py-0.5 rounded {stackColors.bg} {stackColors.text}">
 				{data.project.stack_type}
 			</span>
 			<span class="text-[10px] px-2 py-0.5 rounded-full {statusColors.bg} {statusColors.text}">
 				{data.project.status}
 			</span>
+			{#if data.project.repo_url}
+				<CIStatusBadge projectId={data.project.id} size="md" showLabel={false} />
+			{/if}
 		</div>
 		
 		<div class="flex items-center gap-2">
@@ -335,6 +371,12 @@
 				🚀 Launch Pipeline
 			</button>
 			{#if data.project.repo_url}
+				<button 
+					onclick={() => showIssueImport = true}
+					class="px-3 py-1 text-xs bg-info/20 text-info border border-info/30 rounded hover:bg-info/30 transition-colors"
+				>
+					Import Issues
+				</button>
 				<button 
 					onclick={openInGitHub}
 					class="px-3 py-1 text-xs bg-bg-hover border border-border rounded hover:border-border-light transition-colors"
@@ -376,6 +418,12 @@
 			class="px-4 py-2 text-sm transition-colors {activeTab === 'kanban' ? 'text-accent border-b-2 border-accent' : 'text-text-muted hover:text-text'}"
 		>
 			Kanban ({data.tasks?.length || 0})
+		</button>
+		<button 
+			onclick={() => activeTab = 'git-history'}
+			class="px-4 py-2 text-sm transition-colors {activeTab === 'git-history' ? 'text-accent border-b-2 border-accent' : 'text-text-muted hover:text-text'}"
+		>
+			Git History
 		</button>
 		<button 
 			onclick={() => activeTab = 'activity'}
@@ -476,6 +524,11 @@
 			</div>
 		{/if}
 
+		<!-- Dependencies Section -->
+		<div class="bg-bg-card border border-border rounded-lg p-5 mb-6">
+			<DependenciesSection projectId={data.project.id} allProjects={allProjects} />
+		</div>
+
 		<!-- Environment Notes -->
 		<div class="bg-bg-card border border-border rounded-lg p-5">
 			<div class="flex items-center justify-between mb-4">
@@ -540,6 +593,12 @@
 			onTaskUpdate={handleTaskUpdate}
 			onTaskCreate={handleTaskCreate}
 		/>
+
+	{:else if activeTab === 'git-history'}
+		<!-- Git History Tab -->
+		<div class="bg-bg-card border border-border rounded-lg p-5">
+			<GitHistoryTab projectId={data.project.id} />
+		</div>
 
 	{:else if activeTab === 'activity'}
 		<!-- Activity Feed -->
@@ -658,6 +717,14 @@
 	defaultBranch={data.project.default_branch}
 	on:close={closeLaunchWizard}
 	on:launch={handleLaunch}
+/>
+
+<!-- Issue Import Modal -->
+<IssueImportModal
+	projectId={data.project.id}
+	visible={showIssueImport}
+	on:close={() => showIssueImport = false}
+	on:imported={handleIssueImported}
 />
 
 <style>

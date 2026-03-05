@@ -133,6 +133,20 @@ export interface GitHubRepo {
 	primaryLanguage?: string;
 }
 
+export interface DocVersion {
+	id: number;
+	doc_id: number;
+	version: number;
+	content: string;
+	changed_by: string | null;
+	created_at: string;
+}
+
+export interface DocTemplate {
+	type: ProjectDoc['doc_type'];
+	template: string;
+}
+
 export interface ProjectCreateRequest {
 	name: string;
 	slug?: string;

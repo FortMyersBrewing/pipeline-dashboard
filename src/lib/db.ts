@@ -96,6 +96,15 @@ function initDb(db: Database.Database) {
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);
 
+		CREATE TABLE IF NOT EXISTS doc_versions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			doc_id INTEGER NOT NULL REFERENCES project_docs(id) ON DELETE CASCADE,
+			version INTEGER NOT NULL,
+			content TEXT NOT NULL,
+			changed_by TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
 		CREATE TABLE IF NOT EXISTS project_deps (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

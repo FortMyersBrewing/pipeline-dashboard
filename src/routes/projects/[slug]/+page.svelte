@@ -9,6 +9,7 @@
 	import MarkdownEditor from '$lib/components/MarkdownEditor.svelte';
 	import DocumentCard from '$lib/components/DocumentCard.svelte';
 	import KanbanBoard from '$lib/components/KanbanBoard.svelte';
+	import PipelineLaunchWizard from '$lib/components/pipeline/PipelineLaunchWizard.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -19,6 +20,7 @@
 	let editingDoc = $state<ProjectDoc | null>(null);
 	let showNewDocForm = $state(false);
 	let isEditingEnvNotes = $state(false);
+	let showLaunchWizard = $state(false);
 
 	let editForm = $state({
 		name: '',
@@ -265,6 +267,21 @@
 		await invalidateAll();
 	}
 
+	function openLaunchWizard() {
+		showLaunchWizard = true;
+	}
+
+	function closeLaunchWizard() {
+		showLaunchWizard = false;
+	}
+
+	async function handleLaunch(event: CustomEvent) {
+		const { tasks } = event.detail;
+		console.log('Launched tasks:', tasks);
+		await invalidateAll();
+		// Could show a success notification here
+	}
+
 	async function saveEnvNotes(content: string) {
 		try {
 			const response = await fetch(`/api/projects/${data.project.id}`, {
@@ -311,6 +328,12 @@
 		</div>
 		
 		<div class="flex items-center gap-2">
+			<button 
+				onclick={openLaunchWizard}
+				class="px-4 py-2 text-sm bg-accent text-white rounded hover:bg-accent-hover transition-colors flex items-center gap-2"
+			>
+				🚀 Launch Pipeline
+			</button>
 			{#if data.project.repo_url}
 				<button 
 					onclick={openInGitHub}
@@ -624,6 +647,18 @@
 		</div>
 	</div>
 {/if}
+
+<!-- Pipeline Launch Wizard -->
+<PipelineLaunchWizard 
+	projectId={data.project.id}
+	projectName={data.project.name}
+	projectDocs={data.docs as ProjectDoc[] || []}
+	visible={showLaunchWizard}
+	defaultPriority={data.project.default_priority}
+	defaultBranch={data.project.default_branch}
+	on:close={closeLaunchWizard}
+	on:launch={handleLaunch}
+/>
 
 <style>
 	.line-clamp-2 {

@@ -152,6 +152,43 @@ function initDb(db: Database.Database) {
 		// Column already exists, ignore
 	}
 
+	// Add new columns to tasks table for Phase 3 (context bundling)
+	try {
+		db.exec(`ALTER TABLE tasks ADD COLUMN bundled_context TEXT`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE tasks ADD COLUMN context_docs TEXT`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE tasks ADD COLUMN context_files TEXT`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+	try {
+		db.exec(`ALTER TABLE tasks ADD COLUMN branch_strategy TEXT DEFAULT 'main'`);
+	} catch (e) {
+		// Column already exists, ignore
+	}
+
+	// Create task actions table
+	try {
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS task_actions (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+				action TEXT NOT NULL,
+				reason TEXT,
+				created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+			)
+		`);
+	} catch (e) {
+		// Table already exists, ignore
+	}
+
 	// Seed projects if none exist
 	const count = db.prepare('SELECT COUNT(*) as n FROM projects').get() as { n: number };
 	if (count.n === 0) {
